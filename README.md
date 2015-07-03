@@ -1,0 +1,2 @@
+# sscheck
+ScalaCheck for Spark
