@@ -37,5 +37,7 @@ libraryDependencies += "org.specs2" %% "specs2-junit" % specs2Version
 libraryDependencies += "io.github.nicolasstucki" %% "multisets" % "0.1"
 
 resolvers ++= Seq(
-  "MVN Repository.com" at "http://mvnrepository.com/artifact/"
+  "MVN Repository.com" at "http://mvnrepository.com/artifact/",
+  "scalaz-bintray" at "http://dl.bintray.com/scalaz/releases"
 )
+
