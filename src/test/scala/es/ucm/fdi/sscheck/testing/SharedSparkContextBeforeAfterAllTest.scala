@@ -20,7 +20,7 @@ import es.ucm.fdi.sscheck.gen.RDDGen._
 import scala.reflect.ClassTag
 
 @RunWith(classOf[JUnitRunner])
-class SharedSparkContextForEachTest extends Specification
+class SharedSparkContextBeforeAfterAllTest extends Specification
 		 						    with SharedSparkContextBeforeAfterAll 
 		 						    with ScalaCheck {
 
