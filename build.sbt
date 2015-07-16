@@ -7,7 +7,8 @@ scalaVersion := "2.10.5"
 lazy val sparkVersion = "1.4.0"
 
 // lazy val specs2Version = "3.6.2" 
-lazy val specs2Version = "3.6.2-20150714111537-9b1ffcc"
+  // this version fixes issue #393
+lazy val specs2Version = "3.6.2-20150716123420-ac2f605"
 
 // Use `sbt doc` to generate scaladoc, more on chapter 14.8 of "Scala Cookbook"
 
