@@ -6,7 +6,8 @@ scalaVersion := "2.10.5"
 
 lazy val sparkVersion = "1.4.0"
 
-lazy val specs2Version = "3.6.1"
+// lazy val specs2Version = "3.6.2" 
+lazy val specs2Version = "3.6.2-20150714111537-9b1ffcc"
 
 // Use `sbt doc` to generate scaladoc, more on chapter 14.8 of "Scala Cookbook"
 
@@ -24,7 +25,7 @@ libraryDependencies += "org.scalatest" %% "scalatest" % "2.2.1"
 
 libraryDependencies += "org.scalacheck" %% "scalacheck" % "1.12.2"
 
-libraryDependencies += "org.specs2" %% "specs2-core" % "3.6.1" 
+libraryDependencies += "org.specs2" %% "specs2-core" % specs2Version
 
 libraryDependencies += "org.specs2" %% "specs2-core" % specs2Version 
 
@@ -36,8 +37,11 @@ libraryDependencies += "org.specs2" %% "specs2-junit" % specs2Version
 
 libraryDependencies += "io.github.nicolasstucki" %% "multisets" % "0.1"
 
+libraryDependencies += "holdenk" % "spark-testing-base" % "1.3.0_0.0.5"
+
 resolvers ++= Seq(
   "MVN Repository.com" at "http://mvnrepository.com/artifact/",
-  "scalaz-bintray" at "http://dl.bintray.com/scalaz/releases"
+  "scalaz-bintray" at "http://dl.bintray.com/scalaz/releases",
+  "Spark Packages Repo" at "http://dl.bintray.com/spark-packages/maven"
 )
 
