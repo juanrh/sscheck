@@ -1,0 +1,6 @@
+language: scala
+scala:
+   - 2.10.5
+jdk:
+  - oraclejdk7
+script: sbt  ++$TRAVIS_SCALA_VERSION test-only es.ucm.fdi.sscheck.testing.SequentialScalacheckOriginal
