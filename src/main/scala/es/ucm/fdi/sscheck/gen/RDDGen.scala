@@ -7,7 +7,7 @@ import org.apache.spark.rdd.RDD
 
 import scala.reflect.ClassTag
 
-import es.ucm.fdi.sscheck.testing.Parallelism
+import es.ucm.fdi.sscheck.spark.Parallelism
 
 /** Generators for RDDs and implicit conversions from Seq and Seq generators to RDD and RDD 
  *  generators. All the functions are based on parallelizing generated sequences

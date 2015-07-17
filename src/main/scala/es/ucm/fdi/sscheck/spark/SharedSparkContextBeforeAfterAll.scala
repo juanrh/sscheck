@@ -1,4 +1,4 @@
-package es.ucm.fdi.sscheck.testing
+package es.ucm.fdi.sscheck.spark
 
 import org.specs2.specification.BeforeAfterAll
 
