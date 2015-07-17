@@ -52,8 +52,11 @@ class StreamingContextActorReceiverTest extends org.specs2.Specification
                      with ScalaCheck 
                      with Logging {
    
+  override def sparkMaster : String = "local[5]"
+  
   var maybeSsc : Option[StreamingContext] = None
-  def batchDuration = Duration(10)
+  // with too small batch intervals the local machine just cannot handle the work
+  def batchDuration = Duration(300) // Duration(500) // Duration(10)
   
   override def before : Unit = {
     assert(maybeSsc.isEmpty)
@@ -62,7 +65,7 @@ class StreamingContextActorReceiverTest extends org.specs2.Specification
   override def after : Unit = {
     assert(! maybeSsc.isEmpty)
     // TODO: block until all the batches have been processed
-    Thread.sleep(2 * 1000) // FIXME this could be a global timeout, or better something that looks if data is being sent or not
+    Thread.sleep(20 * 1000) // FIXME this could be a global timeout, or better something that looks if data is being sent or not
                              // maybe be could have a counter of test cases currently running
     logger.warn("stopping spark streaming context")
     maybeSsc. get. stop(stopSparkContext=false, stopGracefully=false)
@@ -74,17 +77,19 @@ class StreamingContextActorReceiverTest extends org.specs2.Specification
     "Spark Streaming and ScalaCheck tests should" ^
     "use a proxy actor receiver to send data to a dstream in parallel"  ! actorSendingProp
    
-  val dsgenSeqSeq1 = Gen.listOfN(3, Gen.listOfN(2, Gen.choose(1, 100)))
+  // val dsgenSeqSeq1 = Gen.listOfN(3, Gen.listOfN(2, Gen.choose(1, 100)))
+    val dsgenSeqSeq1 = Gen.listOfN(50, Gen.listOfN(30, Gen.choose(1, 100)))
   //val dsgenSeqSeq1 = Gen.listOfN(30, Gen.listOfN(50, Gen.choose(1, 100)))
 
   def actorSendingProp = {
     logger.warn("creating Streaming Context")
     val ssc = maybeSsc.get
     val receiverActorName = "actorDStream1"
-    val (actor1 , actorInputDStream1) = 
+    val (proxyReceiverActor , actorInputDStream) = 
       (ProxyReceiverActor.getActorSelection(receiverActorName), 
        ProxyReceiverActor.createActorDStream[Int](ssc, receiverActorName))
-    actorInputDStream1.print()
+    // actorInputDStream.print()
+    actorInputDStream.map(_+1).map(x => (x % 5, 1)).reduceByKey(_+_).print()
     
     // TODO: assertions go here before the streaming context is started
     
@@ -96,18 +101,36 @@ class StreamingContextActorReceiverTest extends org.specs2.Specification
     logger.info("detected that receiver has started")
     
     val thisProp = Prop.forAll ("pdstream" |: dsgenSeqSeq1) { pdstream : Seq[Seq[Int]] =>
-      // TODO: wait for the end of the batch to send more data
-      // TODO: use scalacheck callback to get test case id
-      pdstream foreach { batch => {
-          // logger.debug FIXME restore
-          logger.info(s"Sending to actor $actor1 batch ${batch.mkString(", ")}")
-          batch.foreach(actor1 ! _)
+      // await for the end of a batch to send more data
+        // NOTE this implies one listener per test case, so send is multiplexed already
+        // TODO: we could count here how many listeners are registered and not register more
+        // at least until some of them have stopped sending data. That doesn't unregister listeners 
+        // but limits the amount of work for Spark. A simple approach is waiting for an empty
+        // batch, based on a listener that looks on the number of records in BatchInfo
+      ssc.addStreamingListener(new StreamingListener {
+        var batches = pdstream 
+        override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted) : Unit =  {
+          if (batches.length > 0) {
+            val batch = batches(0)
+            batches = batches.tail
+            // FIXME: use debug instead
+            logger.info(s"sending to proxy actor $proxyReceiverActor new batch ${batch.mkString(", ")}")
+            batch. foreach(proxyReceiverActor ! _)
+          }
         }
-      }
-      logger.info("sending last message of the test case")
-      actor1 ! -42 
+      })
+      
+      // TODO: use scalacheck callback to get test case id
+//      pdstream foreach { batch => {
+//          // logger.debug FIXME restore
+//          logger.info(s"Sending to actor proxyReceiverActor batch ${batch.mkString(", ")}")
+//          batch.foreach(proxyReceiverActor ! _)
+//        }
+//      }
+//      logger.info("sending last message of the test case")
+//      proxyReceiverActor ! -42 
       true
-    }.set(workers = 5, minTestsOk = 10).verbose
+    }.set(workers = 1, minTestsOk = 50).verbose
     //.set(workers = 5, minTestsOk = 100).verbose FIXME restore
 
     // Returning thisProperty as the result for this example instead of ok or something like that 

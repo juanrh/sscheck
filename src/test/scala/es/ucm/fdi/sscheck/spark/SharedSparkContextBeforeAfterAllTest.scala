@@ -25,8 +25,8 @@ class SharedSparkContextBeforeAfterAllTest extends Specification
 		 						    with ScalaCheck {
 
   override def defaultParallelism: Int = 3
-  override def master : String = "local[5]"
-  override def appName = this.getClass().getName()
+  override def sparkMaster : String = "local[5]"
+  override def sparkAppName = this.getClass().getName()
   
   implicit def defaultScalacheckParams = Parameters(minTestsOk = 101).verbose
   

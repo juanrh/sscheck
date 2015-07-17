@@ -11,13 +11,13 @@ trait SharedSparkContext
   with java.io.Closeable {
   /** Override for custom config
   * */
-  def master : String = "local[4]"
+  def sparkMaster : String = "local[4]"
   /** Override for custom config
   * */
-  def appName : String = "scalacheck Spark test"
+  def sparkAppName : String = "scalacheck Spark test"
   
   // lazy val so early definitions are not needed for subtyping
-  @transient lazy val conf = new SparkConf().setMaster(master).setAppName(appName)    
+  @transient lazy val conf = new SparkConf().setMaster(sparkMaster).setAppName(sparkAppName)    
   
   @transient protected[this] var _sc : Option[SparkContext] = None
   def sc() : SparkContext = { 
