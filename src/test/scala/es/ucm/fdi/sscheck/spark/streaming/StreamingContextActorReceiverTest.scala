@@ -14,6 +14,8 @@ import org.apache.spark._
 import org.apache.spark.streaming.{Duration, StreamingContext}
 import org.apache.spark.streaming.dstream.DStream
 
+import com.typesafe.scalalogging.slf4j.Logging
+
 import es.ucm.fdi.sscheck.spark.SharedSparkContextBeforeAfterAll
 import es.ucm.fdi.sscheck.spark.streaming.receiver.ProxyReceiverActor
 
@@ -43,7 +45,8 @@ class StreamingContextActorReceiverTest extends org.specs2.Specification
                      with org.specs2.matcher.MustThrownExpectations
                      with BeforeAfterEach
                      with SharedSparkContextBeforeAfterAll
-                     with ScalaCheck {
+                     with ScalaCheck 
+                     with Logging {
    
   var maybeSsc : Option[StreamingContext] = None
   def batchDuration = Duration(10)
@@ -57,7 +60,7 @@ class StreamingContextActorReceiverTest extends org.specs2.Specification
     // TODO: block until all the batches have been processed
     Thread.sleep(2 * 1000) // FIXME this could be a global timeout, or better something that looks if data is being sent or not
                              // maybe be could have a counter of test cases currently running
-    println("stopping spark streaming context")
+    logger.warn("stopping spark streaming context")
     maybeSsc. get. stop(stopSparkContext=false, stopGracefully=false)
     maybeSsc = None
   }
@@ -71,7 +74,7 @@ class StreamingContextActorReceiverTest extends org.specs2.Specification
   val dsgenSeqSeq1 = Gen.listOfN(30, Gen.listOfN(50, Gen.choose(1, 100)))
 
   def actorSendingProp = {
-    println("Creating Streaming Context")
+    logger.warn("creating Streaming Context")
     val ssc = maybeSsc.get
     val receiverActorName = "actorDStream1"
     val (actor1 , actorInputDStream1) = 
@@ -87,11 +90,11 @@ class StreamingContextActorReceiverTest extends org.specs2.Specification
       // TODO: wait for the end of the batch to send more data
       // TODO: use scalacheck callback to get test case id
       pdstream foreach { batch => {
-          println(s"Sending to actor $actor1 batch ${batch.mkString(", ")}")
+          logger.debug(s"Sending to actor $actor1 batch ${batch.mkString(", ")}")
           batch.foreach(actor1 ! _)
         }
       }
-      println("sending last message og the test case")
+      logger.info("sending last message of the test case")
       actor1 ! -42 
       true
     }.set(workers = 5, minTestsOk = 100).verbose

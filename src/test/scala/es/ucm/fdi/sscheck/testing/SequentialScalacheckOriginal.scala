@@ -4,17 +4,21 @@ import org.junit.runner.RunWith
 import org.specs2.runner.JUnitRunner
 import org.specs2.ScalaCheck
 import org.specs2.scalacheck.{Parameters, ScalaCheckProperty}
+import org.specs2.specification.BeforeAfterEach
+
 import org.scalacheck.{Prop, Gen}
 import org.scalacheck.Arbitrary.arbitrary
 import org.scalacheck.Prop.AnyOperators
 
-import org.specs2.specification.BeforeAfterEach
+import com.typesafe.scalalogging.slf4j.Logging
 
+// (almost the same) example for https://github.com/etorreborre/specs2/issues/393
 @RunWith(classOf[JUnitRunner])
 class SequentialScalacheckOriginal extends org.specs2.Specification 
                      with org.specs2.matcher.MustThrownExpectations
                      with BeforeAfterEach
-                     with ScalaCheck {
+                     with ScalaCheck 
+                     with Logging {
   def is = 
    sequential ^
    "Example run should be sequential with ScalaCheck configured for one worker" ^
@@ -23,18 +27,25 @@ class SequentialScalacheckOriginal extends org.specs2.Specification
      end
 
   var counters = scala.collection.mutable.Map("example" -> 0, "test case" -> 0, "prop1" -> 0)
+  def getPrinter(counterId : String) = { 
+    if (counterId == "test case")
+      (s : String) => logger.debug(s)
+    else 
+      (s : String) => logger.warn(s)		    	
+  }
 
   def enter(counterId : String) : Unit = this.synchronized {
-    println(s"one more $counterId")
+    val print = getPrinter(counterId)
+    print(s"one more $counterId")
     counters(counterId) = counters(counterId) + 1
     if (counters(counterId) > 1) {
-      println(s"too many $counterId")
+      logger.error(s"too many $counterId")
       throw new RuntimeException("this should be sequential")
     }
   }
 
   def exit(counterId : String) : Unit = this.synchronized { 
-    println(s"one less $counterId")
+    getPrinter(counterId)(s"one less $counterId")
     counters(counterId) -= 1
   }
 
@@ -54,7 +65,7 @@ class SequentialScalacheckOriginal extends org.specs2.Specification
     enterOnce()
     val p = 
       Prop.forAll ("x" |: Gen.choose(0, 100)) { x : Int => 
-        print(s"$x,")
+        logger.debug(s"$x,")
         enter("test case")
         x must be_>=(0)
         exit("test case")
@@ -65,7 +76,7 @@ class SequentialScalacheckOriginal extends org.specs2.Specification
   }
 
   def prop2 = {
-    println("running prop2")
+    logger.info("running prop2")
     2 === 2
   }
 }

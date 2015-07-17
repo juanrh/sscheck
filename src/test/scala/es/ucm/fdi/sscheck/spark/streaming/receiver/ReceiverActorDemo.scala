@@ -13,6 +13,8 @@ import scala.concurrent._
 import ExecutionContext.Implicits.global
 import scala.util.Try
 
+import com.typesafe.scalalogging.slf4j.Logging
+
 /** A pair of an actor input DStream and an Akka actor selection that can be used to 
  *  send messages to that actor, that will forward those messages to the input DStream   
  * */
@@ -32,7 +34,8 @@ object InputDStreamWithProxyActor {
  *  the actor forwards all the messages it receives that match its generic type 
  * */
 class ProxyReceiverActorDemo[A:ClassTag]
-      extends Actor with ActorHelper with Logging  {
+      extends Actor with ActorHelper {
+  // Note ActorHelper has Spark's Logging as supertype 
   override def preStart = {
     logInfo(s"Starting ${this.getClass.getName} $self")
   }
@@ -72,7 +75,8 @@ object ProxyReceiverActorDemo {
   }
 }
 
-object ReceiverActorDemo extends App {
+object ReceiverActorDemo extends App 
+                         with Logging {
   val conf = new SparkConf().setMaster("local[5]").setAppName("ReceiverActorDemo")    
   val sc = new SparkContext(conf)
   val batchDuration = Duration(100)
@@ -99,14 +103,14 @@ object ReceiverActorDemo extends App {
       future {
         // only start sending the messages when the receiver has started, otherwise the
         // first messages can be lost
-        println("now receiver is ready to receive messages")
+        logger.warn("now receiver is ready to receive messages")
       
         // this message doesn't reach the DStream because it doesn't 
         // have the type String, so it is discarded in the receive of the actor   
         receiverActor ! 42
         for (msg <- "hola caracola que tal lo llevas yo aqui intentando usar actores con Spark Streaming, parece que funciona ok!".split("""\s+""")) {
           // these messages reach the DStream because it has type String
-          println(s"sending message [${msg}] to receiver actor $receiverActor")
+          logger.info(s"sending message [${msg}] to receiver actor $receiverActor")
           receiverActor ! msg
 	      Thread.sleep(50)
         }
@@ -132,21 +136,21 @@ object ReceiverActorDemo extends App {
     
     override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted) : Unit =  {
       if (hasReceiverStarted) {
-        println(s"batch completed at time ${batchCompleted.batchInfo.batchTime}")
+        logger.info(s"batch completed at time ${batchCompleted.batchInfo.batchTime}")
         batchesCounter += 1
         // ssc.stop is ignored if executed before the receiver has started, so we start
         // counting batches only after the receiver has started
         if (batchesCounter >= maxNumBatches && ! stoppingContext) {
           // graceful stop can take some batches, use stoppingContext to avoid calling stop several times 
           stoppingContext = true
-          println(s"stopping streaming context at time ${batchCompleted.batchInfo.batchTime}")
+          logger.warn(s"stopping streaming context at time ${batchCompleted.batchInfo.batchTime}")
           // we need another thread to stop the context, otherwise we get a deadlock as 
           // this method cannot finish until the context stops, and the context cannot
           // stop until this method finishes
           future {
             Try { ssc.stop(stopSparkContext=true, stopGracefully=true) } recover {
               case _ => {
-                println(s"forcing non graceful stop of streaming context")
+                logger.error(s"forcing non graceful stop of streaming context")
                 ssc.stop(stopSparkContext=true, stopGracefully=false) 
               }
             }
