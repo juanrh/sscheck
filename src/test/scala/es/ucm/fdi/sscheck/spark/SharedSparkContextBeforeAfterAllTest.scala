@@ -113,7 +113,7 @@ class SharedSparkContextBeforeAfterAllTest extends Specification
   
   def forallRDDGenOfNFreqMean = {
     val freqs = Map(1 -> 0, 4 -> 1)
-    val rddSize = 200
+    val rddSize = 300
     val gRDDFreq = RDDGen.ofN(rddSize, Gen.frequency(freqs.mapValues(Gen.const(_)).toSeq:_*))
     val expectedMean = {
       val freqS = freqs.toSeq
