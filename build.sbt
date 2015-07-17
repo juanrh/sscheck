@@ -6,7 +6,7 @@ version := "1.0"
 
 scalaVersion := "2.10.5"
 
-lazy val sparkVersion = "1.4.0"
+lazy val sparkVersion = "1.4.1"
 
 // lazy val specs2Version = "3.6.2" 
   // this version fixes issue #393
