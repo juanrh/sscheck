@@ -13,6 +13,11 @@ import org.scalacheck.Prop.AnyOperators
 import org.apache.spark._
 import org.apache.spark.streaming.{Duration, StreamingContext}
 import org.apache.spark.streaming.dstream.DStream
+import org.apache.spark.streaming.scheduler.{StreamingListener, StreamingListenerReceiverStarted, StreamingListenerBatchCompleted}
+
+import scala.concurrent._
+import ExecutionContext.Implicits.global
+import scala.concurrent.duration._
 
 import com.typesafe.scalalogging.slf4j.Logging
 
@@ -21,9 +26,8 @@ import es.ucm.fdi.sscheck.spark.streaming.receiver.ProxyReceiverActor
 
 /*
  * TODO
- * - block before Prop.forAll until onReceiverStarted, otherwise first batches are
- * lost. Now we have an arbitrary timeout
  * - wait to send data for new batch onBatchCompleted
+ * - identify each test case: try to use the test id
  * - add assertions and collect their exceptions with an accumulator
  * - stop the context only after all the batches for all the test cases have been
  * processed. An approach could be storing the start time and number of batches of 
@@ -70,8 +74,8 @@ class StreamingContextActorReceiverTest extends org.specs2.Specification
     "Spark Streaming and ScalaCheck tests should" ^
     "use a proxy actor receiver to send data to a dstream in parallel"  ! actorSendingProp
    
-  // val dsgenSeqSeq1 = Gen.listOfN(3, Gen.listOfN(2, Gen.choose(1, 100)))
-  val dsgenSeqSeq1 = Gen.listOfN(30, Gen.listOfN(50, Gen.choose(1, 100)))
+  val dsgenSeqSeq1 = Gen.listOfN(3, Gen.listOfN(2, Gen.choose(1, 100)))
+  //val dsgenSeqSeq1 = Gen.listOfN(30, Gen.listOfN(50, Gen.choose(1, 100)))
 
   def actorSendingProp = {
     logger.warn("creating Streaming Context")
@@ -81,23 +85,30 @@ class StreamingContextActorReceiverTest extends org.specs2.Specification
       (ProxyReceiverActor.getActorSelection(receiverActorName), 
        ProxyReceiverActor.createActorDStream[Int](ssc, receiverActorName))
     actorInputDStream1.print()
-     // TODO: assertions go here before the streaming context is started   
+    
+    // TODO: assertions go here before the streaming context is started
+    
     ssc.start()
-    // TODO: block before sending data, if not we have data loss: do it with 
-    // the handler, not a timeout
-    Thread.sleep(1000)
+    
+    // wait for the receiver to start before sending data, otherwise the 
+    // first batches are lost because we are using ! to send the data to the actor
+    StreamingContextUtils.awaitUntilReceiverStarted(ssc, atMost = 5 seconds)
+    logger.info("detected that receiver has started")
+    
     val thisProp = Prop.forAll ("pdstream" |: dsgenSeqSeq1) { pdstream : Seq[Seq[Int]] =>
       // TODO: wait for the end of the batch to send more data
       // TODO: use scalacheck callback to get test case id
       pdstream foreach { batch => {
-          logger.debug(s"Sending to actor $actor1 batch ${batch.mkString(", ")}")
+          // logger.debug FIXME restore
+          logger.info(s"Sending to actor $actor1 batch ${batch.mkString(", ")}")
           batch.foreach(actor1 ! _)
         }
       }
       logger.info("sending last message of the test case")
       actor1 ! -42 
       true
-    }.set(workers = 5, minTestsOk = 100).verbose
+    }.set(workers = 5, minTestsOk = 10).verbose
+    //.set(workers = 5, minTestsOk = 100).verbose FIXME restore
 
     // Returning thisProperty as the result for this example instead of ok or something like that 
     // is crucial for failing when the prop fails, even in  "thrown expectations" mode of Specs2
