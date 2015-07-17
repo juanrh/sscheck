@@ -20,8 +20,11 @@ parallelExecution := false
 // resourceDirectory in Compile := baseDirectory.value / "main/resources"
 // resourceDirectory in Test := baseDirectory.value / "main/resources"
 
-// Configure sbt to add the resources path to the eclipse project http://stackoverflow.com/questions/14060131/access-configuration-resources-in-scala-ide
-// This is critical so log4j.properties is found
+// Eclipse support
+addSbtPlugin("com.typesafe.sbteclipse" % "sbteclipse-plugin" % "2.5.0")
+
+    // Configure sbt to add the resources path to the eclipse project http://stackoverflow.com/questions/14060131/access-configuration-resources-in-scala-ide
+    // This is critical so log4j.properties is found by eclipse
 EclipseKeys.createSrc := EclipseCreateSrc.Default + EclipseCreateSrc.Resource
 
 // Spark 
