@@ -7,7 +7,9 @@ import scala.reflect._
 
 import org.apache.spark.streaming.receiver.ActorHelper
 import akka.actor.{Actor, Props, ActorSelection}
+import com.typesafe.scalalogging.slf4j.Logging
 
+// TODO: consider buffering to call the reliable version of store with a bunch of data
 /** Simple Akka actor that can be used to create an InputDStream, to which 
  *  the actor forwards all the messages it receives that match its generic type
  *  
@@ -26,13 +28,26 @@ class ProxyReceiverActor[A:ClassTag]
   } 
   
   override def receive = {
-    // case msg : A => store(msg) <= this check implies primitive types like Int are dropped
-    case msg => {
-      // logInfo(s"received message $msg")// FIXME
-      store(msg.asInstanceOf[A])
+    /* Akka converts scala.Int into java.lang.Integer, that is subclass of AnyRef 
+     * but not of scala.Int, therefore a check like that would imply dropping any 
+     * Int that is sent, which is not an option
+     * case msg : A => store(msg) 
+     */
+    case msg => {  
+      // logDebug(s"received message [${msg}] with type ${msg.getClass} at actor ${self}") 
+      
+      /* other option is http://jatinpuri.com/2014/03/replace-view-bounds/, but 
+       "no implicit view available" seems to scape from Try */
+      // Try(msg.asInstanceOf[A])       // check convertible
+      //  .foreach {x : A => super[ActorHelper].store(x)} // store converted
+      // Let it crash version
+      super[ActorHelper].store(msg.asInstanceOf[A])
     }
   }
 }
+
+/* TODO: coud use actor lookup here insted of a hard coded path
+ * */
 object ProxyReceiverActor {
   def createActorDStream[A](ssc : StreamingContext, receiverActorName : String)
                            (implicit aCt : ClassTag[A]) : InputDStream[A] =
@@ -53,7 +68,6 @@ object ProxyReceiverActor {
     val driverHost = sc.getConf.get("spark.driver.host")
     val driverPort = sc.getConf.get("spark.driver.port")
     val actorSystem = SparkEnv.get.actorSystem
-    // TODO: coud use actor lookup here insted of a hard coded path
     val actorUrl = s"akka.tcp://sparkDriver@$driverHost:$driverPort/user/Supervisor0/$receiverActorName"
     actorSystem.actorSelection(actorUrl)
   }
