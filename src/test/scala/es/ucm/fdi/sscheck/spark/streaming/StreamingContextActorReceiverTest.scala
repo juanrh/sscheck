@@ -19,6 +19,8 @@ import org.apache.spark.streaming.scheduler.{StreamingListener, StreamingListene
 import scala.concurrent._
 import scala.concurrent.duration._
 import ExecutionContext.Implicits.global
+import java.util.concurrent.atomic.AtomicLong
+import java.lang.ThreadLocal
 
 import com.typesafe.scalalogging.slf4j.Logging
 
@@ -28,9 +30,8 @@ import es.ucm.fdi.sscheck.spark.streaming.receiver.ProxyReceiverActor
 
 /*
  * TODO
- * - wait to send data for new batch onBatchCompleted
- * - identify each test case: try to use the test id
- * - add assertions and collect their exceptions with an accumulator
+ * - add assertions and fail the property on assertion fail => accumulator?, or exploit foreachRDD running 
+ * at the driver wrapping with AsResult? Fail fast and stop streaming context on assertion fail
  * - stop the context only after all the batches for all the test cases have been
  * processed. An approach could be storing the start time and number of batches of 
  * the test case that starts last, in a synchronized variable for the Specification, 
@@ -46,14 +47,40 @@ import es.ucm.fdi.sscheck.spark.streaming.receiver.ProxyReceiverActor
  * - add some test examples: use TL generators for that?
  * */
 
-object TestCaseId {
-  var currentId = 0
-  def next() : TestCaseId = synchronized {
-    currentId += 1
-    TestCaseId(currentId)
-  }
-}
-case class TestCaseId(id : Int) 
+/* The send parallelism is controlled with the number of workers of the Prop, with one test case 
+ * being executed in parallel per worker. Test cases are identified with a Long id safely generated
+ * with an AtomicLong. Synchronization is obtained by associating a SyncVar to each worker through a 
+ * shared ThreadLocal[SyncVar[Unit]]. The initial and only value for that ThreadLocal is defined by 
+ * overriding initialValue(), which registers a StreamingListener per worker that onBatchCompleted 
+ * makes a put() to the SyncVar if not set, so workers wait with take() before sending a new batch. 
+ * Alternatives to this mechanism could be:
+ * 
+ * - java.util.concurrent.LinkedBlockingQueue is another option, the idea is sharing a single
+ * LinkedBlockingQueue[Unit] among all the workers and a single StreamingListener. If we know the number
+ * of workers then the StreamingListener would put a () per each worker onBatchCompleted, and the workers 
+ * would block with take() before sending a new batch. A race condition is possible if sending a batch is
+ * too fast for a particular worker. For example with two workers we could have: 
+ * 
+ * - worker 1 and worker 2 block waiting in take()
+ * - StreamingListener puts 2 () in the queue 
+ * - worker 1 completes the take and then sends all the records for the current batch 
+ * - worker 1 blocks waiting in a take()
+ * - worker 1 completes the take and then sends all the records for the next batch
+ * 
+ * So in that situation worker 1 might send 2 batches, "stealing" a batch from worker 2, because worker 1
+ * is able to send all the records for a batch and start a new take() before worker 2 reads the take. The
+ * problem is that all the () inserted in the queue are the same, and don't have a recipient address.   
+ * As the size of the batches is random, because batches are generated randomly, this is a non trivial problem,
+ * and adding a call to Thread.sleep after sending each new batch would be a waste of execution time  
+ * 
+ * - java.util.concurrent.Phaser or java.util.concurrent.CyclicBarrier are another option, but they are
+ * symmetric in the sense that all the parties wait for each other, while in this case we would want 
+ * all the workers to wait for a single StreamingListener, which is a fundamentally asymmetric situation 
+ * 
+ * The solution based on SyncVar is a shared nothing in the synchronization objects, as each worker
+ * thread has its private SyncVar and StreamingListener, which should be reflected in decreased 
+ * contention that could compensate the overhead of having a SyncVar per worker
+ * */
 
 @RunWith(classOf[JUnitRunner])
 class StreamingContextActorReceiverTest extends org.specs2.Specification 
@@ -63,7 +90,7 @@ class StreamingContextActorReceiverTest extends org.specs2.Specification
                      with ScalaCheck 
                      with Logging {
    
-  override def sparkMaster : String = "local[5]"
+  override def sparkMaster : String = "local[8]"
   
   var maybeSsc : Option[StreamingContext] = None
   // with too small batch intervals the local machine just cannot handle the work
@@ -73,6 +100,7 @@ class StreamingContextActorReceiverTest extends org.specs2.Specification
   override def before : Unit = {
     assert(maybeSsc.isEmpty)
     maybeSsc = Some(new StreamingContext(sc, batchDuration))
+    logWarning("created test Streaming Context")
   }
   override def after : Unit = {
     assert(! maybeSsc.isEmpty)
@@ -81,120 +109,101 @@ class StreamingContextActorReceiverTest extends org.specs2.Specification
     // consider Around and AroundTimeout https://etorreborre.github.io/specs2/guide/SPECS2-3.6.2/org.specs2.guide.TimeoutExamples.html
     Thread.sleep(20 * 1000) // FIXME this could be a global timeout, or better something that looks if data is being sent or not
                              // maybe be could have a counter of test cases currently running
-    logger.warn("stopping spark streaming context")
+    logWarning("stopping spark streaming context")
     maybeSsc. get. stop(stopSparkContext=false, stopGracefully=false)
     maybeSsc = None
   }
   
-  /** Number of test case that will be executed in parallel on the same DStream
-   * */
-  def testCaseMultiplexing = 30 // 10
-  
   def is = 
     sequential ^
     "Spark Streaming and ScalaCheck tests should" ^
-    "use a proxy actor receiver to send data to a dstream in parallel"  ! actorSendingProp
+      "use a proxy actor receiver to send data to a dstream in parallel"  ! actorSendingProp
    
-  // val dsgenSeqSeq1 = Gen.listOfN(3, Gen.listOfN(2, Gen.choose(1, 100)))
-    val dsgenSeqSeq1 = Gen.listOfN(50, Gen.listOfN(30, Gen.choose(1, 100)))
-  //val dsgenSeqSeq1 = Gen.listOfN(30, Gen.listOfN(50, Gen.choose(1, 100)))
-
-  // FIXME: move to suitable place
-   /** Treats prefixDstream as a finite Spark DStream, i.e. as a sequence of batches, 
-    *  and sends each batch each time Spark completes the processing of a batch. 
-    *  This call is not blocking, as it simply registers a streaming listener 
-    *  that onBatchCompleted sends all the elements of the current element of prefixDstream 
-    *  and then moves to the next element
-   */
-  def sendBatchesOnBatchCompleteMaxParallel[A](ssc : StreamingContext, 
-		  								       proxyReceiverActor : ActorSelection,
-		  									   prefixDstream : Seq[Seq[A]]) : Unit = {
-    ssc.addStreamingListener(new StreamingListener {
-      var batches = prefixDstream 
-      override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted) : Unit =  {
-        if (batches.length > 0) {
-          val batch = batches(0)
-          batches = batches.tail
-          // FIXME: use debug instead
-          logger.info(s"sending to proxy actor $proxyReceiverActor new batch ${batch.mkString(", ")}")
-          batch. foreach(proxyReceiverActor ! _)
-        }
-      }
-    })
-  }
+     // val dsgenSeqSeq1 = Gen.listOfN(3, Gen.listOfN(2, Gen.choose(1, 100)))
+     // val dsgenSeqSeq1 = Gen.listOfN(50, Gen.listOfN(30, Gen.choose(1, 100)))
+    //val dsgenSeqSeq1 = Gen.listOfN(30, Gen.listOfN(50, Gen.choose(1, 100)))
+    // for checking race conditions
+    val zeroSeqSeq = Gen.listOfN(50,  Gen.listOfN(30, 0))
+    val oneSeqSeq = Gen.listOfN(50, Gen.listOfN(30, 1))
+    val dsgenSeqSeq1 = Gen.oneOf(zeroSeqSeq, oneSeqSeq)   
     
   def actorSendingProp = {
-    logger.warn("creating Streaming Context")
     val ssc = maybeSsc.get
     val receiverActorName = "actorDStream1"
     val (proxyReceiverActor , actorInputDStream) = 
       (ProxyReceiverActor.getActorSelection(receiverActorName), 
-       ProxyReceiverActor.createActorDStream[Int](ssc, receiverActorName))
-    // actorInputDStream.print()
-    actorInputDStream.map(_+1).map(x => (x % 5, 1)).reduceByKey(_+_).print()
-    
+       ProxyReceiverActor.createActorDStream[(Long, Int)](ssc, receiverActorName))
+    actorInputDStream.print()
+    var i = 0
+    actorInputDStream.foreachRDD { rdd =>
+      // NOTE: batch cannot be completed until this code finishes, use
+      // future if needed to avoid blocking the batch
+      i += 1
+      logDebug(s"found ${i}th batch ")
+      // TODO: for now it is normal that the mean is mixed, as test 
+      // cases are nor separated by key
+      if (rdd.count > 0) {  
+        // note this way we only handle the keys for the test cases 
+        // that are currently running  
+        for (key <- rdd.keys.distinct.toLocalIterator) {
+          val valsForThisKey = rdd.filter(_._1 == key).values
+          val rddMean = valsForThisKey.mean()
+          List(0.0, 1.0) must contain(rddMean)
+          valsForThisKey.distinct.count === 1
+          // 0 === 1 TODO should fail on this
+          logDebug(s"mean for key ${key}= ${valsForThisKey.mean()}")
+        }
+      }
+    }
     // TODO: assertions go here before the streaming context is started
     ssc.start()
     
     // wait for the receiver to start before sending data, otherwise the 
     // first batches are lost because we are using ! to send the data to the actor
     StreamingContextUtils.awaitUntilReceiverStarted(ssc, atMost = 5 seconds)
-    logger.warn("detected that receiver has started")
+    logWarning("receiver has started")
     
-      // TODO: with a sequential code it's now easier to get and use a test id
-    var currentTestCaseId = TestCaseId.next() 
-    
-    val onBatchCompletedSyncVar = new SyncVar[Unit]
-    ssc.addStreamingListener(new StreamingListener {
-       override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted) : Unit =  {
-         // signal the property about the completion of a new batch  
-         if (! onBatchCompletedSyncVar.isSet) {
-           // note only this threads makes puts, so no problem with 
-           // concurrency
-           onBatchCompletedSyncVar.put(())
-         }
-       }
-    })
-    
-    val _testCaseMultiplexing = testCaseMultiplexing
-    var multiplexedTestCases : List[Seq[Seq[Int]]] = Nil
+    // test case id counter / generator
+    val testCaseIdCounter = new AtomicLong(0)
+    // each worker thread has its own SyncVar with a registered addStreamingListener
+    // that notifies onBatchCompleted
+    val localOnBatchCompletedSyncVar = new ThreadLocal[SyncVar[Unit]] {
+      override def initialValue() : SyncVar[Unit]  = { 
+        val onBatchCompletedSyncVar = new SyncVar[Unit]
+        ssc.addStreamingListener(new StreamingListener {
+          override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted) : Unit =  {
+            // signal the property about the completion of a new batch  
+            if (! onBatchCompletedSyncVar.isSet) {
+              // note only this threads makes puts, so no problem with concurrency
+              onBatchCompletedSyncVar.put(())
+            }
+          }
+        })
+        onBatchCompletedSyncVar
+      }
+    }
+
     // using AsResult explicitly to be independent from issue #393
     val thisProp = AsResult { Prop.forAll ("pdstream" |: dsgenSeqSeq1) { prefixDstream : Seq[Seq[Int]] =>
-      // FIXME This implies some tests cases are lost ==> TODO add a final cleanup of multiplexedTestCases 
-      // after thisProp, and make an and of that result with thisProp. See below 
-      if (multiplexedTestCases.length < _testCaseMultiplexing) {
-        // pick more generated test cases
-        logger.warn(s"adding new test case to multiplexedTestCases: now len is ${multiplexedTestCases.length}")
-        multiplexedTestCases = multiplexedTestCases :+ prefixDstream  
-        logger.warn(s"now multiplexedTestCases.length = ${multiplexedTestCases.length}")
-      } else {
-        // only go to the next test case when we have consumed all the batches
-        // of one of the test cases in multiplexedTestCases
-        while (multiplexedTestCases.length == _testCaseMultiplexing) {
-          // await for the end of a new batch to send more data
-          logger.warn(s"await for the end of a new batch to send more data")
-          onBatchCompletedSyncVar.take()
-          // send new data and filter out completed test cases
-          multiplexedTestCases = multiplexedTestCases map { batches =>
-            val batch = batches.head
-            // FIXME: use debug instead
-            logger.warn(s"sending to proxy actor $proxyReceiverActor new batch ${batch.mkString(", ")}")
-            batch. foreach(proxyReceiverActor ! _)
-            batches.tail
-          } filter {
-            // filter out completed test cases
-            _.length > 0
-          }
-        }
+      // here we have a thread per worker
+      // no need to synchronize for thread / call stack local variables
+      val testCaseId = testCaseIdCounter.getAndIncrement()
+      logWarning(s"starting test case $testCaseId")
+      for (batch <- prefixDstream) {
+        // await for the end of a new batch to send more data
+    	logInfo(s"waiting for batch end at thread ${Thread.currentThread()}")
+        localOnBatchCompletedSyncVar.get.take() // wait for the SyncVar of this thread 
+        logInfo(s"awake after batch end at thread ${Thread.currentThread()}")        
+        logDebug(s"sending to proxy actor $proxyReceiverActor new batch ${batch.mkString(", ")}")
+        batch. foreach(proxyReceiverActor ! (testCaseId, _))
       }
-      // TODO: put body of the while in a function sendCases and put here a 
-      // while (multiplexedTestCases.length > 0) sendCases()
-      
+      logWarning(s"finished test case $testCaseId")
+            
       // TODO: check sync of data sent with how data is checked: i.e. alignment of data
       // production and assertions. I think we get that from Spark if all the 
       // checks are performed as actions
       true
-    }.set(workers = 1, minTestsOk = 150).verbose // NOTE: we always use 1 worker, and leave parallel execution to Spark => override user settings for that
+    }.set(workers = 6, minTestsOk = 100).verbose // NOTE: we always use 1 worker, and leave parallel execution to Spark => override user settings for that
   }
 
     // Returning thisProperty as the result for this example instead of ok or something like that 
