@@ -5,7 +5,7 @@ import org.specs2.runner.JUnitRunner
 import org.specs2.ScalaCheck
 import org.specs2.scalacheck.{Parameters, ScalaCheckProperty}
 import org.specs2.specification.BeforeAfterEach
-import org.specs2.execute.AsResult
+import org.specs2.execute.{AsResult, Result}
 
 import org.scalacheck.{Prop, Gen}
 import org.scalacheck.Arbitrary.arbitrary
@@ -18,8 +18,9 @@ import org.apache.spark.streaming.scheduler.{StreamingListener, StreamingListene
 
 import scala.concurrent._
 import scala.concurrent.duration._
+import scala.util.Try
 import ExecutionContext.Implicits.global
-import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicInteger
 import java.lang.ThreadLocal
 
 import com.typesafe.scalalogging.slf4j.Logging
@@ -29,27 +30,34 @@ import es.ucm.fdi.sscheck.spark.SharedSparkContextBeforeAfterAll
 import es.ucm.fdi.sscheck.spark.streaming.receiver.ProxyReceiverActor
 
 /*
+ * FIXME:
+ * - support empty batches with Either: currently we cannot create an empty batch 
+ * because we emit nothing for empty batches. So replace multiplexing DStream[(TestId, A)] by
+ * DStream[(TestId, Either[A])] where Left is used for empty batches, and Right 
+ * for non empty batches. We maintain an invariant that in the multiplexing DStream
+ * for each key we either have one or more Right, or a single Left 
+ * 
  * TODO
- * - add assertions and fail the property on assertion fail => accumulator?, or exploit foreachRDD running 
- * at the driver wrapping with AsResult? Fail fast and stop streaming context on assertion fail
- * - stop the context only after all the batches for all the test cases have been
- * processed. An approach could be storing the start time and number of batches of 
- * the test case that starts last, in a synchronized variable for the Specification, 
- * so in after() we register a listener that waits until the time of the last completed 
- * batch corresponds to the last batch of the last test case
- * If the context is stopped before the receiver has started then due to 
- * https://issues.apache.org/jira/browse/SPARK-5681 the streaming context will keep running. But
- * that won't happen here because we don't send data until the receiver has started 
+
+ * - create derived dstreams from the generated dstream, and assert on them, abstracting away from 
+ * test multiplexion: try with a derived dstream for map(_+1) and adapt the assertions
  * - test with more than one property: should not be a problem due to sequential. Probably
  * exceptions will be thrown due to https://issues.apache.org/jira/browse/SPARK-8743, but 
  * that is solved and fixed for Spark 1.4.2
- * - encapsulate in a trait for nice code reuse
+ * - encapsulate in a trait for nice code reuse. Consider Shapeless HList https://github.com/milessabin/shapeless/wiki/Feature-overview:-shapeless-2.0.0 
+ * to simulate heterogeneously typed varargs, instead of relaying on several overload for different arities. But
+ * it is important that the user only needs to use raw tuples, use the typpe reconstruction capabitilies of .cast, or
+ * "facilities for abstracting over arity": we can ask the user to use a convention based on position of the argument, 
+ * but the type should be preserved. Copy "Implementation notes" below in the file defining the trait 
  * - add some test examples: use TL generators for that?
+ * - shrinking is currently not supported
  * */
 
-/* The send parallelism is controlled with the number of workers of the Prop, with one test case 
- * being executed in parallel per worker. Test cases are identified with a Long id safely generated
- * with an AtomicLong. Synchronization is obtained by associating a SyncVar to each worker through a 
+/* Implementation notes:
+ *  
+ * # Send parallelism is controlled with the number of workers of the Prop, with one test case 
+ * being executed in parallel per worker. Test cases are identified with a Int id safely generated
+ * with an AtomicInteger. Synchronization is obtained by associating a SyncVar to each worker through a 
  * shared ThreadLocal[SyncVar[Unit]]. The initial and only value for that ThreadLocal is defined by 
  * overriding initialValue(), which registers a StreamingListener per worker that onBatchCompleted 
  * makes a put() to the SyncVar if not set, so workers wait with take() before sending a new batch. 
@@ -80,7 +88,88 @@ import es.ucm.fdi.sscheck.spark.streaming.receiver.ProxyReceiverActor
  * The solution based on SyncVar is a shared nothing in the synchronization objects, as each worker
  * thread has its private SyncVar and StreamingListener, which should be reflected in decreased 
  * contention that could compensate the overhead of having a SyncVar per worker
+ * 
+ * # Fail fast
+ * Generation of test cases finishes on the first counterexample. propResult is a central point where
+ * the assertions for all the workers are checked. propResult starts as None and is assigned to 
+ * Some on the first counterexample only. Also:
+ * - a test case fails on its first failing batch
+ * - a test case fails immediately when it detects other test case at other worker has failed
+ * - ScalaCheck stops sending test cases when the first counter example is detected. That means
+ * the Prop finishes execution and we arrive to after(), where we can stop the StreamingContext 
+ * immediately, because in the Prop we waited until the last batch was completed. We know we won't 
+ * run into https://issues.apache.org/jira/browse/SPARK-5681 (which anyway is solved for Spark 1.5.0)
+ * because we don't start the Prop until the receiver has started, by using 
+ * StreamingContextUtils.awaitUntilReceiverStarted, which is needed anyway to avoid losing the 
+ * first batches, because we are using ! to send to a ProxyReceiverActor
+ * 
+ * # Test case for the counterexample and failing matcher are aligned
+ * This is granted by propResult being assigned Some only once, and the use of TestCaseId to
+ * identify the test cases
+ *  
+ * # Former race condition
+ * This results on a lost of completeness, not of soundness of 
+ * the counterexample, which is always a valid counterexample when found. The problem is
+ * this possible trace
+ * 
+ *  . batch 0 completes
+ *  . a new test case 1 starts at worker1 and its first and only batch b1 is sent
+ *  . worker1 doesn't block for onBatchCompleted, because the test case has finished: then worker 1 
+ *  sees that testResult is not a failure, and begins test case 2, and blocks for onBatchCompleted for batch 1  
+ *  . batch 1 starts, processing the data from test case 1
+ *  . testResult is set to fail for test case 1 when processing test case 1 during batch 1. This means testResult  
+ *  will be constant until the end of the property. But worker1 is already in test case 2, so it will never notice,
+ *  so the prop will succeed and will never find a counterexample. 
+ *  As a possible solution, currently we have for each test case
+ *  
+ *  for each batch
+ *    wait for onBatchCompleted
+ *    send data
+ *  if testResult failed with this test case:
+ *     fail with testResult
+ *  else 
+ *    succeed
+ *  
+ *  if we added an additional batch for the last batch, and even checked the error at each batch
+ *  
+ *  for each batch if not testCaseFailed
+ *    wait for onBatchCompleted (for the batch previous to this one)
+ *    if testResult failed with this test case: 
+ *      testCaseFailed = True
+ *    else 
+ *      send data
+ *  wait for onBatchCompleted (for last batch)
+ *  if testCaseFailed: 
+ *     fail with testResult
+ *  else:
+ *    if testResult failed with this test case (for last batch) 
+ *      fail with testResult
+ *    else: 
+ *      succeed
+ *      
+ * This probably could have problems if batches are too slow due to lack of resources, or a 
+ * badly configured batch interval. But in that case we would be in a bad situation to test 
+ * anything anyway
  * */
+
+object TestCaseIdCounter {
+  type TestCaseId = Int
+}
+/** This class can be used to generate unique test case identifiers per JVM. 
+ * */
+class TestCaseIdCounter {
+  import TestCaseIdCounter.TestCaseId
+  val counter = new AtomicInteger(0)
+  /** @return a fresh TestCaseId. This method is thread safe 
+   * */
+  def nextId() : TestCaseId = counter.getAndIncrement() 
+}
+
+/** This class can be used to wrap the result of the execution of a Prop
+ * @param testCaseId id of the test case that produced this result 
+ * @param result result of the test
+ * */
+case class PropResult(testCaseId : TestCaseIdCounter.TestCaseId, result : Result)
 
 @RunWith(classOf[JUnitRunner])
 class StreamingContextActorReceiverTest extends org.specs2.Specification 
@@ -89,29 +178,25 @@ class StreamingContextActorReceiverTest extends org.specs2.Specification
                      with SharedSparkContextBeforeAfterAll
                      with ScalaCheck 
                      with Logging {
-   
+  import TestCaseIdCounter.TestCaseId
+  
   override def sparkMaster : String = "local[8]"
   
-  var maybeSsc : Option[StreamingContext] = None
+  var _ssc : Option[StreamingContext] = None
   // with too small batch intervals the local machine just cannot handle the work
-  def batchDuration = Duration(300) // Duration(500) // Duration(10)
+  def batchDuration = Duration(300) // Duration(500) // Duration(10) 
   // def batchDuration = Duration(10)
   
   override def before : Unit = {
-    assert(maybeSsc.isEmpty)
-    maybeSsc = Some(new StreamingContext(sc, batchDuration))
+    assert(_ssc.isEmpty)
+    _ssc = Some(new StreamingContext(sc, batchDuration))
     logWarning("created test Streaming Context")
   }
   override def after : Unit = {
-    assert(! maybeSsc.isEmpty)
-    // TODO: block until all the batches have been processed: could 
-    // send a signal in the prop after the last test case. Or maybe 
-    // consider Around and AroundTimeout https://etorreborre.github.io/specs2/guide/SPECS2-3.6.2/org.specs2.guide.TimeoutExamples.html
-    Thread.sleep(20 * 1000) // FIXME this could be a global timeout, or better something that looks if data is being sent or not
-                             // maybe be could have a counter of test cases currently running
+    assert(! _ssc.isEmpty)
     logWarning("stopping spark streaming context")
-    maybeSsc. get. stop(stopSparkContext=false, stopGracefully=false)
-    maybeSsc = None
+    _ssc. get. stop(stopSparkContext=false, stopGracefully=false)
+    _ssc = None
   }
   
   def is = 
@@ -119,43 +204,61 @@ class StreamingContextActorReceiverTest extends org.specs2.Specification
     "Spark Streaming and ScalaCheck tests should" ^
       "use a proxy actor receiver to send data to a dstream in parallel"  ! actorSendingProp
    
-     // val dsgenSeqSeq1 = Gen.listOfN(3, Gen.listOfN(2, Gen.choose(1, 100)))
-     // val dsgenSeqSeq1 = Gen.listOfN(50, Gen.listOfN(30, Gen.choose(1, 100)))
     //val dsgenSeqSeq1 = Gen.listOfN(30, Gen.listOfN(50, Gen.choose(1, 100)))
     // for checking race conditions
-    val zeroSeqSeq = Gen.listOfN(50,  Gen.listOfN(30, 0))
-    val oneSeqSeq = Gen.listOfN(50, Gen.listOfN(30, 1))
+    val batchSize = 5 // 30 
+    val zeroSeqSeq = Gen.listOfN(10,  Gen.listOfN(batchSize, 0)) // Gen.listOfN(30,  Gen.listOfN(50, 0))
+    val oneSeqSeq = Gen.listOfN(10, Gen.listOfN(batchSize, 1)) // Gen.listOfN(30, Gen.listOfN(50, 1))
     val dsgenSeqSeq1 = Gen.oneOf(zeroSeqSeq, oneSeqSeq)   
-    
+        
   def actorSendingProp = {
-    val ssc = maybeSsc.get
+    val ssc = _ssc.get
     val receiverActorName = "actorDStream1"
     val (proxyReceiverActor , actorInputDStream) = 
       (ProxyReceiverActor.getActorSelection(receiverActorName), 
-       ProxyReceiverActor.createActorDStream[(Long, Int)](ssc, receiverActorName))
+       ProxyReceiverActor.createActorDStream[(TestCaseId, Int)](ssc, receiverActorName))
+    // not really necessary but useful
     actorInputDStream.print()
+    
+    // Assertions go here before the streaming context is started
+    // TODO: put the assertions in one place, that should see this as it  
+    // was a single DStream, instead of a multiplexing
     var i = 0
+    var propResult : Option[PropResult] = None 
     actorInputDStream.foreachRDD { rdd =>
       // NOTE: batch cannot be completed until this code finishes, use
       // future if needed to avoid blocking the batch
       i += 1
-      logDebug(s"found ${i}th batch ")
-      // TODO: for now it is normal that the mean is mixed, as test 
-      // cases are nor separated by key
+      logDebug(s"found ${i}th batch ") 
       if (rdd.count > 0) {  
-        // note this way we only handle the keys for the test cases 
+        // Note this way we only handle the keys for the test cases 
         // that are currently running  
-        for (key <- rdd.keys.distinct.toLocalIterator) {
-          val valsForThisKey = rdd.filter(_._1 == key).values
-          val rddMean = valsForThisKey.mean()
-          List(0.0, 1.0) must contain(rddMean)
-          valsForThisKey.distinct.count === 1
-          // 0 === 1 TODO should fail on this
-          logDebug(s"mean for key ${key}= ${valsForThisKey.mean()}")
+        // TODO: this could be optimized by mapping Future on rdd.keys.distinct.collect, which 
+        // would is small as it has the number of workers as size, and then awaiting for the 
+        // results but doing propResult = Some(...) on the first fail. Using a map is nice
+        // because then we have as much parallelism as the number of workers
+        for (testCaseId <- rdd.keys.distinct.toLocalIterator) {
+          if (! propResult.isDefined) {
+            val thisBatchResult = AsResult {
+              val batchForThisTestId = rdd.filter(_._1 == testCaseId).values
+              // batchForThisTestId.count === batchSize // this fails because batches are mixing
+              val batchMean = batchForThisTestId.mean()
+              logInfo(s"test ${testCaseId} current batch mean is ${batchMean}")
+              List(0.0, 1.0) must contain(batchMean)
+              // 0 === 1 // fails ok even if the error is not the last matcher
+              // batchMean must be equalTo(1.0) // should fail for some inputs
+              batchForThisTestId.distinct.count === 1
+            }
+            if (thisBatchResult.isFailure || thisBatchResult.isError  || thisBatchResult.isThrownFailure) {
+              // Invariant: propResult is assigned to Some at most once, only for the first counterexample 
+              // found. This way we ensure we don't mix errors from different test cases 
+              propResult = Some(PropResult(testCaseId = testCaseId, result = thisBatchResult))
+            }
+          }
         }
       }
     }
-    // TODO: assertions go here before the streaming context is started
+   
     ssc.start()
     
     // wait for the receiver to start before sending data, otherwise the 
@@ -163,10 +266,12 @@ class StreamingContextActorReceiverTest extends org.specs2.Specification
     StreamingContextUtils.awaitUntilReceiverStarted(ssc, atMost = 5 seconds)
     logWarning("receiver has started")
     
+    // Synchronization stuff
     // test case id counter / generator
-    val testCaseIdCounter = new AtomicLong(0)
+    val testCaseIdCounter = new TestCaseIdCounter 
     // each worker thread has its own SyncVar with a registered addStreamingListener
-    // that notifies onBatchCompleted
+    // that notifies onBatchCompleted. Better do this after StreamingContextUtils.awaitUntilReceiverStarted
+    // just in case, to await weird race conditions
     val localOnBatchCompletedSyncVar = new ThreadLocal[SyncVar[Unit]] {
       override def initialValue() : SyncVar[Unit]  = { 
         val onBatchCompletedSyncVar = new SyncVar[Unit]
@@ -181,29 +286,59 @@ class StreamingContextActorReceiverTest extends org.specs2.Specification
         })
         onBatchCompletedSyncVar
       }
-    }
+    } 
 
-    // using AsResult explicitly to be independent from issue #393
-    val thisProp = AsResult { Prop.forAll ("pdstream" |: dsgenSeqSeq1) { prefixDstream : Seq[Seq[Int]] =>
+    // using AsResult explicitly to be independent from issue #393 for Specs2
+    	// TODO: shrinking is currently not supported
+    val thisProp = AsResult { Prop.forAllNoShrink ("pdstream" |: dsgenSeqSeq1) { testCaseDstream : Seq[Seq[Int]] =>
       // here we have a thread per worker
       // no need to synchronize for thread / call stack local variables
-      val testCaseId = testCaseIdCounter.getAndIncrement()
-      logWarning(s"starting test case $testCaseId")
-      for (batch <- prefixDstream) {
-        // await for the end of a new batch to send more data
-    	logInfo(s"waiting for batch end at thread ${Thread.currentThread()}")
+      val testCaseId : TestCaseId = testCaseIdCounter.nextId() 
+      var testCaseResult : Result = success
+      // to stop in the middle of the test case as soon as a counterexample is found 
+      var propFailed = false 
+      logInfo(s"starting test case $testCaseId")
+      for (batch <- testCaseDstream if (! propFailed)) {
+        // await for the end of a the previous batch 
+        logDebug(s"waiting for batch end at thread ${Thread.currentThread()}")
         localOnBatchCompletedSyncVar.get.take() // wait for the SyncVar of this thread 
-        logInfo(s"awake after batch end at thread ${Thread.currentThread()}")        
-        logDebug(s"sending to proxy actor $proxyReceiverActor new batch ${batch.mkString(", ")}")
-        batch. foreach(proxyReceiverActor ! (testCaseId, _))
+        logDebug(s"awake after batch end at thread ${Thread.currentThread()}")        
+        if (propResult.isDefined) {
+          // some worker generated a counterexample
+          propFailed = true
+          // is this worker that worker? 
+          val somePropResult = propResult.get 
+          if (somePropResult.testCaseId == testCaseId) {
+            // we are the failing worker, so this is our result
+            testCaseResult = somePropResult.result
+          }
+        } else {
+           // send data for the current batch
+           batch. foreach(proxyReceiverActor ! (testCaseId, _))
+           logDebug(s"sending to proxy actor $proxyReceiverActor new batch ${batch.mkString(", ")}")
+        }
       }
-      logWarning(s"finished test case $testCaseId")
-            
-      // TODO: check sync of data sent with how data is checked: i.e. alignment of data
-      // production and assertions. I think we get that from Spark if all the 
-      // checks are performed as actions
-      true
-    }.set(workers = 6, minTestsOk = 100).verbose // NOTE: we always use 1 worker, and leave parallel execution to Spark => override user settings for that
+      // Note: propFailed is not equivalent to propResult.isDefined, because propFailed is
+      // only defined after a wait for onBatchCompleted
+      if (!propFailed) {
+        // If propFailed is false then wait for one more batch, to cover the 
+        // case were the last batch of this test case is causing the counterexample
+        localOnBatchCompletedSyncVar.get.take() // wait for the SyncVar of this thread
+        // check if this was the test case causing the counterexample, wait for that
+        // batch to be processed
+        if (propResult.isDefined && propResult.get.testCaseId == testCaseId) {
+          // we are the failing worker, so this is our result
+          testCaseResult = propResult.get.result
+        } 
+      }
+     
+      // Note: ScalaCheck will show the correct test case that caused the counterexample
+      // because only the worker that generated that counterexample will fail. Anyway we could
+      // use testCaseResult.mapMessage here to add testCaseDstream to the message of 
+      // testCaseResult if we needed it
+      logInfo(s"finished test case $testCaseId with result $testCaseResult")
+      testCaseResult
+    }.set(workers = 3, minTestsOk = 10).verbose 
   }
 
     // Returning thisProperty as the result for this example instead of ok or something like that 
@@ -211,7 +346,7 @@ class StreamingContextActorReceiverTest extends org.specs2.Specification
     // https://etorreborre.github.io/specs2/guide/SPECS2-3.6.2/org.specs2.guide.Structure.html
     // But this way the property its not executed until the end!, so we cannot stop the streaming
     // context in the property, but in a BeforeAfterEach
-    thisProp 
+     thisProp
   }
   
 }
