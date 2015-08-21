@@ -34,14 +34,14 @@ object InputDStreamWithProxyActor {
  *  the actor forwards all the messages it receives that match its generic type 
  * */
 class ProxyReceiverActorDemo[A:ClassTag]
-      extends Actor with ActorHelper {
+      extends Actor with ActorHelper with Logging {
   // Note ActorHelper has Spark's Logging as supertype 
   override def preStart = {
-    logInfo(s"Starting ${this.getClass.getName} $self")
+    logger.info(s"Starting ${this.getClass.getName} $self")
   }
   
   override def postStop = {
-    logInfo(s"Stopped ${this.getClass.getName} $self")
+    logger.info(s"Stopped ${this.getClass.getName} $self")
   } 
   
   override def receive = {
@@ -49,7 +49,7 @@ class ProxyReceiverActorDemo[A:ClassTag]
       /* According to the logs and DStream.print there is a delay of between one and two 
        * batches from the call to store and the message appearing in a batch 
        * */
-      logInfo(s"received message [${msg}]")
+      logger.info(s"received message [${msg}]")
       store(msg)
     }
   }

@@ -26,10 +26,14 @@ import ExecutionContext.Implicits.global
 
 import java.lang.ThreadLocal
 
+import com.typesafe.scalalogging.slf4j.Logging
+
 import scala.reflect.{classTag, ClassTag}
 import es.ucm.fdi.sscheck.spark.SharedSparkContextBeforeAfterAll
 import org.apache.spark.streaming.dstream.DynSeqQueueInputDStream
 import es.ucm.fdi.sscheck.{TestCaseIdCounter,PropResult,TestCaseId,TestCaseRecord}
+
+// sbt "test-only es.ucm.fdi.sscheck.spark.streaming.StreamingContextDirectReceiverTest"
 
 /* Implementation notes: TODO move to  the file defining the trait 
  *  
@@ -100,11 +104,11 @@ class StreamingContextDirectReceiverTest extends org.specs2.Specification
   override def before : Unit = {
     assert(_ssc.isEmpty)
     _ssc = Some(new StreamingContext(sc, batchDuration))
-    logWarning("created test Streaming Context")
+    logger.warn("created test Streaming Context")
   }
   override def after : Unit = {
     assert(! _ssc.isEmpty)
-    logWarning("stopping spark streaming context")
+    logger.warn("stopping spark streaming context")
     _ssc. get. stop(stopSparkContext=false, stopGracefully=false)
     _ssc = None
   }
@@ -137,7 +141,7 @@ class StreamingContextDirectReceiverTest extends org.specs2.Specification
       // NOTE: batch cannot be completed until this code finishes, use
       // future if needed to avoid blocking the batch
       i += 1
-      logDebug(s"found ${i}th batch ") 
+      logger.debug(s"found ${i}th batch ") 
       if (rdd.count > 0) {  
         // Note this way we only handle the keys for the test cases 
         // that are currently running  
@@ -149,10 +153,10 @@ class StreamingContextDirectReceiverTest extends org.specs2.Specification
           if (! propResult.isDefined) {
             val thisBatchResult = AsResult {
               val batchForThisTestId = rdd.filter(_._1 == testCaseId).flatMap(_._2.toList)                
-              logWarning(s"batchForThisTestId $testCaseId: ${batchForThisTestId.collect.mkString(", ")}")
+              logger.warn(s"batchForThisTestId $testCaseId: ${batchForThisTestId.collect.mkString(", ")}")
               batchForThisTestId.count === batchSize
               val batchMean = batchForThisTestId.mean()
-              logInfo(s"test ${testCaseId} current batch mean is ${batchMean}")
+              logger.info(s"test ${testCaseId} current batch mean is ${batchMean}")
               List(0.0, 1.0) must contain(batchMean)
               // 0 === 1 // fails ok even if the error is not the last matcher
               // batchMean must be equalTo(1.0) // should fail for some inputs
@@ -203,7 +207,7 @@ class StreamingContextDirectReceiverTest extends org.specs2.Specification
       // Note: propFailed is not equivalent to propResult.isDefined, because propFailed is
       // only defined after a wait for onBatchCompleted
       var propFailed = false 
-      logWarning(s"starting test case $testCaseId")
+      logger.warn(s"starting test case $testCaseId")
       
       // add current test case to inputDStream
       // inputDStream.addDStream(testCaseDstream.map(_.map((testCaseId, _)))) FIXME
@@ -216,9 +220,9 @@ class StreamingContextDirectReceiverTest extends org.specs2.Specification
       
       for (i <- 1 to testCaseDstream.length if (! propFailed)) {
         // await for the end of the each batch 
-        logWarning(s"waiting end of batch ${i} of test case ${testCaseId} at thread ${Thread.currentThread()}")
+        logger.warn(s"waiting end of batch ${i} of test case ${testCaseId} at thread ${Thread.currentThread()}")
         localOnBatchCompletedSyncVar.get.take() // wait for the SyncVar of this thread
-        logWarning(s"awake after end of batch ${i} of test case ${testCaseId} at thread ${Thread.currentThread()}")        
+        logger.warn(s"awake after end of batch ${i} of test case ${testCaseId} at thread ${Thread.currentThread()}")        
         if (propResult.isDefined) {
           // some worker generated a counterexample
           propFailed = true
@@ -236,9 +240,9 @@ class StreamingContextDirectReceiverTest extends org.specs2.Specification
       // because only the worker that generated that counterexample will fail. Anyway we could
       // use testCaseResult.mapMessage here to add testCaseDstream to the message of 
       // testCaseResult if we needed it
-      logWarning(s"finished test case $testCaseId with result $testCaseResult")
+      logger.warn(s"finished test case $testCaseId with result $testCaseResult")
       testCaseResult
-  }.set(workers = 3, minTestsOk = 100).verbose } // Note: overriding the number of workers works ok
+  }.set(workers = 3, minTestsOk = 10).verbose } // Note: overriding the number of workers works ok
     thisProp 
   }
   

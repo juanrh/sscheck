@@ -57,10 +57,10 @@ class DynSeqQueueInputDStream [A: ClassTag](
     dstreams = dstreamsAndBatch._1
     val batch = dstreamsAndBatch._2
     
-    logWarning(s"dstreams = $dstreams")
+    logger.warn(s"dstreams = $dstreams")
      
     if (batch.size > 0) {
-      logWarning(s"computing batch ${batch.mkString(",")}")
+      logger.warn(s"computing batch ${batch.mkString(",")}")
       
       // copied from DirectKafkaInputDStream
       // Report the record number of this batch interval to InputInfoTracker.

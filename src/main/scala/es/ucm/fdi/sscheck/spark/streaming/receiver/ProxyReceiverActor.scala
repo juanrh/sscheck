@@ -20,11 +20,11 @@ class ProxyReceiverActor[A:ClassTag]
       extends Actor with ActorHelper with Logging  {  
   
   override def preStart = {
-    logInfo(s"Starting $self")
+    logger.info(s"Starting $self")
   }
   
   override def postStop = {
-    logInfo(s"Stopped $self")
+    logger.info(s"Stopped $self")
   } 
   
   override def receive = {
@@ -33,8 +33,8 @@ class ProxyReceiverActor[A:ClassTag]
      * Int that is sent, which is not an option
      * case msg : A => store(msg) 
      */
-    case msg => {  
-      // logDebug(s"received message [${msg}] with type ${msg.getClass} at actor ${self}") 
+    case msg => {
+      // logger.debug(s"received message [${msg}] with type ${msg.getClass} at actor ${self}") 
       
       /* other option is http://jatinpuri.com/2014/03/replace-view-bounds/, but 
        "no implicit view available" seems to scape from Try */
