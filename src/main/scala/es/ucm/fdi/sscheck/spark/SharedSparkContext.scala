@@ -10,9 +10,11 @@ trait SharedSparkContext
   extends Serializable
   with java.io.Closeable 
   with com.typesafe.scalalogging.slf4j.Logging {
+  
   /** Override for custom config
   * */
   def sparkMaster : String = "local[4]"
+    
   /** Override for custom config
   * */
   def sparkAppName : String = "scalacheck Spark test"
@@ -22,7 +24,6 @@ trait SharedSparkContext
   
   @transient protected[this] var _sc : Option[SparkContext] = None
   def sc() : SparkContext = { 
-    logger.info("messag")
     _sc.getOrElse({
       logger.info("creating test Spark context")
       _sc = Some(new SparkContext(conf))
