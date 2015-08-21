@@ -6,29 +6,30 @@ import org.specs2.ScalaCheck
 import org.specs2.scalacheck.{Parameters, ScalaCheckProperty}
 import org.specs2.specification.BeforeAfterEach
 import org.specs2.execute.{AsResult, Result}
+
 import org.scalacheck.{Prop, Gen}
 import org.scalacheck.Arbitrary.arbitrary
 import org.scalacheck.Prop.AnyOperators
+
 import org.apache.spark._
 import org.apache.spark.streaming.{Duration, StreamingContext}
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.scheduler.{StreamingListener, StreamingListenerReceiverStarted, StreamingListenerBatchCompleted}
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.dstream.InputDStream
 import org.apache.spark.streaming.Time
+
 import scala.concurrent._
 import scala.concurrent.duration._
 import scala.util.Try
 import ExecutionContext.Implicits.global
-import java.util.concurrent.atomic.AtomicInteger
+
 import java.lang.ThreadLocal
+
 import scala.reflect.{classTag, ClassTag}
-import com.typesafe.scalalogging.slf4j.Logging
 import es.ucm.fdi.sscheck.spark.SharedSparkContextBeforeAfterAll
 import org.apache.spark.streaming.dstream.DynSeqQueueInputDStream
-import org.apache.spark.streaming.dstream.DynSeqQueueInputDStream
-import es.ucm.fdi.sscheck.{TestCaseIdCounter,PropResult}
+import es.ucm.fdi.sscheck.{TestCaseIdCounter,PropResult,TestCaseId,TestCaseRecord}
 
 /* Implementation notes: TODO move to  the file defining the trait 
  *  
@@ -89,8 +90,6 @@ class StreamingContextDirectReceiverTest extends org.specs2.Specification
                      with SharedSparkContextBeforeAfterAll
                      with ScalaCheck
                      with Logging {
-   import TestCaseIdCounter.TestCaseId
-  
   override def sparkMaster : String = "local[*]"
   
   var _ssc : Option[StreamingContext] = None
@@ -121,11 +120,11 @@ class StreamingContextDirectReceiverTest extends org.specs2.Specification
   val zeroSeqSeq = Gen.listOfN(10,  Gen.listOfN(batchSize, 0)) // Gen.listOfN(30,  Gen.listOfN(50, 0))
   val oneSeqSeq = Gen.listOfN(10, Gen.listOfN(batchSize, 1)) // Gen.listOfN(30, Gen.listOfN(50, 1))
   val dsgenSeqSeq1 = Gen.oneOf(zeroSeqSeq, oneSeqSeq)   
-      
+       
   def testCaseDictInputDStreamProp = {
     val ssc = _ssc.get
-    val inputDStream = // new TestCaseDictInputDStream[Int](ssc)
-       new DynSeqQueueInputDStream[(TestCaseId, Int)](ssc, numSlices = 2)
+    val inputDStream = // new DynSeqQueueInputDStream[(TestCaseId, Int)](ssc, numSlices = 2)
+      new DynSeqQueueInputDStream[TestCaseRecord[Int]](ssc, numSlices = 2)
     
     inputDStream.foreachRDD((rdd, time) => println(s"rdd at time ${time}, size = ${rdd.count}, records = ${rdd.collect.mkString(", ")} "))
   
@@ -149,9 +148,7 @@ class StreamingContextDirectReceiverTest extends org.specs2.Specification
         for (testCaseId <- rdd.keys.distinct.collect) {
           if (! propResult.isDefined) {
             val thisBatchResult = AsResult {
-              val batchForThisTestId = rdd.filter(_._1 == testCaseId).values
-                // this fails because batches are mixing: cases like this should be discarded at most
-              // FIXME restore: 
+              val batchForThisTestId = rdd.filter(_._1 == testCaseId).flatMap(_._2.toList)                
               logWarning(s"batchForThisTestId $testCaseId: ${batchForThisTestId.collect.mkString(", ")}")
               batchForThisTestId.count === batchSize
               val batchMean = batchForThisTestId.mean()
@@ -159,7 +156,7 @@ class StreamingContextDirectReceiverTest extends org.specs2.Specification
               List(0.0, 1.0) must contain(batchMean)
               // 0 === 1 // fails ok even if the error is not the last matcher
               // batchMean must be equalTo(1.0) // should fail for some inputs
-              batchForThisTestId.distinct.count === 1
+              batchForThisTestId.distinct.count === 1 // all inputs are the same
             }
             if (thisBatchResult.isFailure || thisBatchResult.isError  || thisBatchResult.isThrownFailure) {
               // Invariant: propResult is assigned to Some at most once, only for the first counterexample 
@@ -209,7 +206,13 @@ class StreamingContextDirectReceiverTest extends org.specs2.Specification
       logWarning(s"starting test case $testCaseId")
       
       // add current test case to inputDStream
-      inputDStream.addDStream(testCaseDstream.map(_.map((testCaseId, _))))
+      // inputDStream.addDStream(testCaseDstream.map(_.map((testCaseId, _)))) FIXME
+      inputDStream.addDStream(testCaseDstream.map({ batch =>
+        // Invariant: for each test case and batch, we have either a 
+        // single None, or many Some
+        if (batch isEmpty) List((testCaseId, None))
+        else batch.map(r => (testCaseId, Some(r)))
+      }))
       
       for (i <- 1 to testCaseDstream.length if (! propFailed)) {
         // await for the end of the each batch 
@@ -235,7 +238,7 @@ class StreamingContextDirectReceiverTest extends org.specs2.Specification
       // testCaseResult if we needed it
       logWarning(s"finished test case $testCaseId with result $testCaseResult")
       testCaseResult
-  }.set(workers = 3, minTestsOk = 10).verbose } // Note: overriding the number of workers works ok
+  }.set(workers = 3, minTestsOk = 100).verbose } // Note: overriding the number of workers works ok
     thisProp 
   }
   
