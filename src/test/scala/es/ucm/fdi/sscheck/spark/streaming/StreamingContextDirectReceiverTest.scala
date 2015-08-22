@@ -88,12 +88,14 @@ import es.ucm.fdi.sscheck.{TestCaseIdCounter,PropResult,TestCaseId,TestCaseRecor
  * */
 
 @RunWith(classOf[JUnitRunner])
-class StreamingContextDirectReceiverTest extends org.specs2.Specification 
-                     with org.specs2.matcher.MustThrownExpectations
-                     with BeforeAfterEach
-                     with SharedSparkContextBeforeAfterAll
-                     with ScalaCheck
-                     with Logging {
+class StreamingContextDirectReceiverTest 
+  extends org.specs2.Specification 
+  with org.specs2.matcher.MustThrownExpectations
+  with BeforeAfterEach
+  with SharedSparkContextBeforeAfterAll
+  with ScalaCheck
+  with Logging {
+  
   override def sparkMaster : String = "local[*]"
   
   var _ssc : Option[StreamingContext] = None
