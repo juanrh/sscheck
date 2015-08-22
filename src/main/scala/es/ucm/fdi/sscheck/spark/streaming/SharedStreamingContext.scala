@@ -47,7 +47,10 @@ trait SharedStreamingContext
       Try {
         ssc.stop(stopSparkContext=false, stopGracefully=true)
       } recover {
-        case _ => ssc.stop(stopSparkContext=false, stopGracefully=false)
+        case _ => {
+          logger.warn("forcing stop of test Spark Streaming context")
+          ssc.stop(stopSparkContext=false, stopGracefully=false)
+        }
       }
       _ssc = None
     }
