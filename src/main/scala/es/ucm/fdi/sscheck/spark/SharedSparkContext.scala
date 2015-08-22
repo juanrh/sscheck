@@ -25,15 +25,15 @@ trait SharedSparkContext
   @transient protected[this] var _sc : Option[SparkContext] = None
   def sc() : SparkContext = { 
     _sc.getOrElse {
-      logger.info("creating test Spark context")
+      logger.warn("creating test Spark context")
       _sc = Some(new SparkContext(conf))
       _sc.get
     }
   }
   
-  def close() : Unit = {
+  override def close() : Unit = {
     _sc.foreach { sc => 
-      logger.info("stopping test Spark context")
+      logger.warn("stopping test Spark context")
       sc.stop()
       // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
       System.clearProperty("spark.driver.port")

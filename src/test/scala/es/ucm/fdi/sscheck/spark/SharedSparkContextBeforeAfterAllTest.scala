@@ -20,9 +20,10 @@ import es.ucm.fdi.sscheck.gen.RDDGen._
 import scala.reflect.ClassTag
 
 @RunWith(classOf[JUnitRunner])
-class SharedSparkContextBeforeAfterAllTest extends Specification
-		 						    with SharedSparkContextBeforeAfterAll 
-		 						    with ScalaCheck {
+class SharedSparkContextBeforeAfterAllTest 
+  extends Specification
+  with SharedSparkContextBeforeAfterAll 
+  with ScalaCheck {
 
   override def defaultParallelism: Int = 3
   override def sparkMaster : String = "local[5]"

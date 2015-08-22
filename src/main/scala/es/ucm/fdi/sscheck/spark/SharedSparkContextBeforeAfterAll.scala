@@ -10,11 +10,11 @@ import org.apache.spark.rdd.RDD
 
 import scala.reflect.ClassTag
 
-import es.ucm.fdi.sscheck.gen.RDDGen
-
 /** Shares a Spark Context among all the test in a Specs2 suite, this trait is also eases the use
  *  of Scalacheck with Spark, as if some tests are ScalaCheck properties, then the Spark context 
  *  is shared among all the generated test cases.
+ *  
+ *  Life cycle: a SparkContext is created beforeAll and closed afterAll
  *  
  *  The Spark context can be made explicitly available to all the tests, passing this.sc(), 
  *  or implicitly via an implicit val 
@@ -26,14 +26,15 @@ trait SharedSparkContextBeforeAfterAll extends BeforeAfterAll
                          		       with SharedSparkContext {
   /** Force the creation of the Spark Context before any test 
    */
-  override def beforeAll : Unit = { this.sc() } 
+  override def beforeAll : Unit = { this.sc() }
+  
   /** Close Spark Context after all tests
    */
-  override def afterAll : Unit = { this.close() }
+  override def afterAll : Unit = { super[SharedSparkContext].close() }
 
   /* Another option would be replacing BeforeAfterAll with an eager creation
-    * of this.sc through making impSC not lazy, and cleaning up in AfterAll, 
-    * but I think the currnent solution has a more clear intent 
+   * of this.sc through making impSC not lazy, and cleaning up in AfterAll, 
+   * but I think the current solution has a more clear intent 
    * */   
   /** Make implicitly available the SparkContext 
    * */                      		  
