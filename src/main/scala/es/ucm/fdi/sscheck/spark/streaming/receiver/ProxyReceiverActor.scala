@@ -22,7 +22,9 @@ class ProxyReceiverActor[A:ClassTag]
   extends Actor 
   with ActorHelper {  
   
-  @transient private[this] val logger = Logger(LoggerFactory.getLogger("ProxyReceiverActor"))
+  // cannot use private[this] due to https://issues.scala-lang.org/browse/SI-8087
+  // @transient private[this] val logger = Logger(LoggerFactory.getLogger("ProxyReceiverActor"))
+  @transient private val logger = Logger(LoggerFactory.getLogger("ProxyReceiverActor"))
   
   override def preStart = {
     logger.info(s"Starting $self")

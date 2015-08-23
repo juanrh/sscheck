@@ -38,7 +38,9 @@ class ProxyReceiverActorDemo[A:ClassTag]
   extends Actor 
   with ActorHelper {
   
-  @transient private[this] val logger = Logger(LoggerFactory.getLogger("ProxyReceiverActorDemo"))
+  // cannot use private[this] due to https://issues.scala-lang.org/browse/SI-8087
+  //@transient private[this] val logger = Logger(LoggerFactory.getLogger("ProxyReceiverActorDemo"))
+  @transient private val logger = Logger(LoggerFactory.getLogger("ProxyReceiverActorDemo"))
   
   // Note ActorHelper has Spark's Logging as supertype 
   override def preStart = {
@@ -83,7 +85,9 @@ object ProxyReceiverActorDemo {
 object ReceiverActorDemo 
   extends App {
   
-  @transient private[this] val logger = Logger(LoggerFactory.getLogger("ReceiverActorDemo"))
+  // cannot use private[this] due to https://issues.scala-lang.org/browse/SI-8087
+  //@transient private[this] val logger = Logger(LoggerFactory.getLogger("ReceiverActorDemo"))
+  @transient private val logger = Logger(LoggerFactory.getLogger("ReceiverActorDemo"))
   
   val conf = new SparkConf().setMaster("local[5]").setAppName("ReceiverActorDemo")    
   val sc = new SparkContext(conf)

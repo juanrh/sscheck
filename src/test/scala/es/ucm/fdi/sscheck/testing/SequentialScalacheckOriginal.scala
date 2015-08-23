@@ -21,7 +21,8 @@ class SequentialScalacheckOriginal
   with BeforeAfterEach
   with ScalaCheck {
 
-  @transient private[this] val logger = Logger(LoggerFactory.getLogger("SequentialScalacheckOriginal"))
+  // cannot use private[this] due to https://issues.scala-lang.org/browse/SI-8087
+  @transient private val logger = Logger(LoggerFactory.getLogger("SequentialScalacheckOriginal"))
   
   def is = 
    sequential ^

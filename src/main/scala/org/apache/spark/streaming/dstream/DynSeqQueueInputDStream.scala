@@ -22,7 +22,9 @@ class DynSeqQueueInputDStream [A: ClassTag](
     val numSlices : Int = 2
   ) extends InputDStream[A](_ssc) {
   
-  @transient private[this] val logger = Logger(LoggerFactory.getLogger("DynSeqQueueInputDStream"))
+  // cannot use private[this] due to https://issues.scala-lang.org/browse/SI-8087
+  //@transient private[this] val logger = Logger(LoggerFactory.getLogger("DynSeqQueueInputDStream"))
+  @transient private val logger = Logger(LoggerFactory.getLogger("DynSeqQueueInputDStream"))
   
   @transient val _sc = _ssc.sparkContext
   

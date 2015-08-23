@@ -12,7 +12,9 @@ trait SharedSparkContext
   extends Serializable
   with java.io.Closeable { 
   
-  @transient private[this] val logger = Logger(LoggerFactory.getLogger("SharedSparkContext"))
+  // cannot use private[this] due to https://issues.scala-lang.org/browse/SI-8087
+  //@transient private[this] val logger = Logger(LoggerFactory.getLogger("SharedSparkContext"))
+  @transient private val logger = Logger(LoggerFactory.getLogger("SharedSparkContext"))
   
   /** Override for custom config
   * */

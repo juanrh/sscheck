@@ -12,7 +12,9 @@ import es.ucm.fdi.sscheck.spark.SharedSparkContext
 trait SharedStreamingContext 
   extends SharedSparkContext {
 
-  @transient private[this] val logger = Logger(LoggerFactory.getLogger("SharedStreamingContext"))
+  // cannot use private[this] due to https://issues.scala-lang.org/browse/SI-8087
+  // @transient private[this] val logger = Logger(LoggerFactory.getLogger("SharedStreamingContext"))
+  @transient private val logger = Logger(LoggerFactory.getLogger("SharedStreamingContext"))
   
   /** Override for custom config
   * */

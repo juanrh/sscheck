@@ -96,7 +96,8 @@ class StreamingContextDirectReceiverTest
   with SharedSparkContextBeforeAfterAll
   with ScalaCheck {
   
-  @transient private[this] val logger = Logger(LoggerFactory.getLogger("StreamingContextDirectReceiverTest"))
+  // cannot use private[this] due to https://issues.scala-lang.org/browse/SI-8087
+  @transient private val logger = Logger(LoggerFactory.getLogger("StreamingContextDirectReceiverTest"))
     
   override def sparkMaster : String = "local[*]"
   
