@@ -2,13 +2,18 @@ package es.ucm.fdi.sscheck.spark.streaming
 
 import org.apache.spark.streaming.{StreamingContext,Duration}
 
-import es.ucm.fdi.sscheck.spark.SharedSparkContext
+import com.typesafe.scalalogging.slf4j.Logger
+import org.slf4j.LoggerFactory
 
 import scala.util.Try 
+
+import es.ucm.fdi.sscheck.spark.SharedSparkContext
 
 trait SharedStreamingContext 
   extends SharedSparkContext {
 
+  @transient private[this] val logger = Logger(LoggerFactory.getLogger("SharedStreamingContext"))
+  
   /** Override for custom config
   * */
   def batchDuration : Duration 

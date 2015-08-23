@@ -7,7 +7,8 @@ import org.apache.spark.rdd.RDD
 import scala.reflect.ClassTag
 import java.io.{NotSerializableException, ObjectOutputStream}
 
-import com.typesafe.scalalogging.slf4j.Logging
+import com.typesafe.scalalogging.slf4j.Logger
+import org.slf4j.LoggerFactory
 
 /** Parallelization is only performed on compute(), to avoid too many RDDs. This
  *  class is for local testing anyway, and we could easily modify this class to 
@@ -19,8 +20,9 @@ import com.typesafe.scalalogging.slf4j.Logging
 class DynSeqQueueInputDStream [A: ClassTag](
     @transient _ssc : StreamingContext,
     val numSlices : Int = 2
-  ) extends InputDStream[A](_ssc) 
-    with Logging {
+  ) extends InputDStream[A](_ssc) {
+  
+  @transient private[this] val logger = Logger(LoggerFactory.getLogger("DynSeqQueueInputDStream"))
   
   @transient val _sc = _ssc.sparkContext
   

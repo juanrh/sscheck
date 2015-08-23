@@ -10,15 +10,19 @@ import org.scalacheck.{Prop, Gen}
 import org.scalacheck.Arbitrary.arbitrary
 import org.scalacheck.Prop.AnyOperators
 
-import com.typesafe.scalalogging.slf4j.Logging
+import com.typesafe.scalalogging.slf4j.Logger
+import org.slf4j.LoggerFactory
 
 // (almost the same) example for https://github.com/etorreborre/specs2/issues/393
 @RunWith(classOf[JUnitRunner])
-class SequentialScalacheckOriginal extends org.specs2.Specification 
-                     with org.specs2.matcher.MustThrownExpectations
-                     with BeforeAfterEach
-                     with ScalaCheck 
-                     with Logging {
+class SequentialScalacheckOriginal 
+  extends org.specs2.Specification 
+  with org.specs2.matcher.MustThrownExpectations
+  with BeforeAfterEach
+  with ScalaCheck {
+
+  @transient private[this] val logger = Logger(LoggerFactory.getLogger("SequentialScalacheckOriginal"))
+  
   def is = 
    sequential ^
    "Example run should be sequential with ScalaCheck configured for one worker" ^

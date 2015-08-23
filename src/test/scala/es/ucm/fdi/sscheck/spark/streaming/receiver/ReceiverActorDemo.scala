@@ -13,7 +13,8 @@ import scala.concurrent._
 import ExecutionContext.Implicits.global
 import scala.util.Try
 
-import com.typesafe.scalalogging.slf4j.Logging
+import com.typesafe.scalalogging.slf4j.Logger
+import org.slf4j.LoggerFactory
 
 /** A pair of an actor input DStream and an Akka actor selection that can be used to 
  *  send messages to that actor, that will forward those messages to the input DStream   
@@ -34,7 +35,11 @@ object InputDStreamWithProxyActor {
  *  the actor forwards all the messages it receives that match its generic type 
  * */
 class ProxyReceiverActorDemo[A:ClassTag]
-      extends Actor with ActorHelper with Logging {
+  extends Actor 
+  with ActorHelper {
+  
+  @transient private[this] val logger = Logger(LoggerFactory.getLogger("ProxyReceiverActorDemo"))
+  
   // Note ActorHelper has Spark's Logging as supertype 
   override def preStart = {
     logger.info(s"Starting ${this.getClass.getName} $self")
@@ -75,8 +80,11 @@ object ProxyReceiverActorDemo {
   }
 }
 
-object ReceiverActorDemo extends App 
-                         with Logging {
+object ReceiverActorDemo 
+  extends App {
+  
+  @transient private[this] val logger = Logger(LoggerFactory.getLogger("ReceiverActorDemo"))
+  
   val conf = new SparkConf().setMaster("local[5]").setAppName("ReceiverActorDemo")    
   val sc = new SparkContext(conf)
   val batchDuration = Duration(100)

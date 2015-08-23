@@ -7,7 +7,9 @@ import scala.reflect._
 
 import org.apache.spark.streaming.receiver.ActorHelper
 import akka.actor.{Actor, Props, ActorSelection}
-import com.typesafe.scalalogging.slf4j.Logging
+
+import com.typesafe.scalalogging.slf4j.Logger
+import org.slf4j.LoggerFactory
 
 // TODO: consider buffering to call the reliable version of store with a bunch of data
 /** Simple Akka actor that can be used to create an InputDStream, to which 
@@ -17,7 +19,10 @@ import com.typesafe.scalalogging.slf4j.Logging
  *  the message appearing in a batch
  * */
 class ProxyReceiverActor[A:ClassTag]
-      extends Actor with ActorHelper with Logging  {  
+  extends Actor 
+  with ActorHelper {  
+  
+  @transient private[this] val logger = Logger(LoggerFactory.getLogger("ProxyReceiverActor"))
   
   override def preStart = {
     logger.info(s"Starting $self")

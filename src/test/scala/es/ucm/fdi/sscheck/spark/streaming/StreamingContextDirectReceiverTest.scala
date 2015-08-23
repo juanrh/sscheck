@@ -26,7 +26,8 @@ import ExecutionContext.Implicits.global
 
 import java.lang.ThreadLocal
 
-import com.typesafe.scalalogging.slf4j.Logging
+import com.typesafe.scalalogging.slf4j.Logger
+import org.slf4j.LoggerFactory
 
 import scala.reflect.{classTag, ClassTag}
 import es.ucm.fdi.sscheck.spark.SharedSparkContextBeforeAfterAll
@@ -93,9 +94,10 @@ class StreamingContextDirectReceiverTest
   with org.specs2.matcher.MustThrownExpectations
   with BeforeAfterEach
   with SharedSparkContextBeforeAfterAll
-  with ScalaCheck
-  with Logging {
+  with ScalaCheck {
   
+  @transient private[this] val logger = Logger(LoggerFactory.getLogger("StreamingContextDirectReceiverTest"))
+    
   override def sparkMaster : String = "local[*]"
   
   var _ssc : Option[StreamingContext] = None

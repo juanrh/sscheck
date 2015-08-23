@@ -1,23 +1,26 @@
 package es.ucm.fdi.sscheck.spark
 
 import org.apache.spark._
-import com.typesafe.scalalogging.slf4j.Logging
+
+import com.typesafe.scalalogging.slf4j.Logger
+import org.slf4j.LoggerFactory
 
 /** This trait can be used to share a Spark Context. The context is created
  *  the first time sc() is called, and stopped when close() is called
  * */
 trait SharedSparkContext
   extends Serializable
-  with java.io.Closeable 
-  with com.typesafe.scalalogging.slf4j.Logging {
+  with java.io.Closeable { 
+  
+  @transient private[this] val logger = Logger(LoggerFactory.getLogger("SharedSparkContext"))
   
   /** Override for custom config
   * */
-  def sparkMaster : String = "local[4]"
+  def sparkMaster : String 
     
   /** Override for custom config
   * */
-  def sparkAppName : String = "scalacheck Spark test"
+  def sparkAppName : String = "ScalaCheck Spark test"
   
   // lazy val so early definitions are not needed for subtyping
   @transient lazy val conf = new SparkConf().setMaster(sparkMaster).setAppName(sparkAppName)    
