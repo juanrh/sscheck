@@ -22,8 +22,10 @@ import scala.reflect.ClassTag
  *  Also implicits are provided to convert ScalaCheck generators of Seq into generators of RDD, 
  *  and Seq into RDD
  * */
-trait SharedSparkContextBeforeAfterAll extends BeforeAfterAll
-                         		       with SharedSparkContext {
+trait SharedSparkContextBeforeAfterAll 
+  extends BeforeAfterAll
+  with SharedSparkContext {
+  
   /** Force the creation of the Spark Context before any test 
    */
   override def beforeAll : Unit = { this.sc() }
