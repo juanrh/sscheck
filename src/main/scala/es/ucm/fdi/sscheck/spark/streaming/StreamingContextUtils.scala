@@ -2,6 +2,7 @@ package es.ucm.fdi.sscheck.spark.streaming
 
 import scala.concurrent._
 import scala.concurrent.duration._
+import ExecutionContext.Implicits.global
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.scheduler.{StreamingListener, StreamingListenerReceiverStarted, StreamingListenerBatchCompleted}
 
@@ -27,8 +28,10 @@ object StreamingContextUtils {
   
   /** This is a blocking call that awaits for completion of numBatches in ssc. 
    *  NOTE if a receiver is used awaitUntilReceiverStarted() should be called before
+   *  
+   *  @param atMost maximum amount of time to spend waiting for all the batches to complete
    * */
-  def awaitForNBatchesCompleted(numBatches : Int)
+  def awaitForNBatchesCompleted(numBatches : Int, atMost : scala.concurrent.duration.Duration = 30 seconds)
                                (ssc : StreamingContext) : Unit = {
     val onBatchCompletedSyncVar = new SyncVar[Unit]
     ssc.addStreamingListener(new StreamingListener {
@@ -39,8 +42,11 @@ object StreamingContextUtils {
         }
       }
     })
-    for (_ <- 1 to numBatches) {
-      onBatchCompletedSyncVar.take()
-    } 
+    val waitingForBatches = Future {
+      for (_ <- 1 to numBatches) {
+        onBatchCompletedSyncVar.take()
+      }  
+    }
+    Await.result(waitingForBatches, atMost)
   }
 }
