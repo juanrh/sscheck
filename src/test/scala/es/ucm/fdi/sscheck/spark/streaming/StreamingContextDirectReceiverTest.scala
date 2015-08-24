@@ -168,6 +168,8 @@ class StreamingContextDirectReceiverTest
               batchForThisTestId.distinct.count === 1 // all inputs are the same
             }
             if (thisBatchResult.isFailure || thisBatchResult.isError  || thisBatchResult.isThrownFailure) {
+              // TODO: check https://etorreborre.github.io/specs2/guide/SPECS2-3.6.2/org.specs2.guide.StandardResults.html to see
+              // this is ok
               // Invariant: propResult is assigned to Some at most once, only for the first counterexample 
               // found. This way we ensure we don't mix errors from different test cases 
               propResult = Some(PropResult(testCaseId = testCaseId, result = thisBatchResult))
@@ -226,6 +228,7 @@ class StreamingContextDirectReceiverTest
       for (i <- 1 to testCaseDstream.length if (! propFailed)) {
         // await for the end of the each batch 
         logger.warn(s"waiting end of batch ${i} of test case ${testCaseId} at thread ${Thread.currentThread()}")
+        //  FIXME add timeout, owise exceptions in assertions lead to infitive loop
         localOnBatchCompletedSyncVar.get.take() // wait for the SyncVar of this thread
         logger.warn(s"awake after end of batch ${i} of test case ${testCaseId} at thread ${Thread.currentThread()}")        
         if (propResult.isDefined) {

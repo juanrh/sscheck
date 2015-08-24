@@ -8,8 +8,12 @@ import org.apache.spark.streaming.Duration
 import org.apache.spark.rdd.RDD
 
 import scala.collection.mutable.Queue
+import scala.concurrent.duration._
 
-import com.typesafe.scalalogging.slf4j.Logging
+import com.typesafe.scalalogging.slf4j.Logger
+import org.slf4j.LoggerFactory
+
+import es.ucm.fdi.sscheck.matcher.specs2.RDDMatchers._
 
 // sbt "test-only es.ucm.fdi.sscheck.spark.streaming.SharedStreamingContextBeforeAfterEachTest"
 
@@ -18,8 +22,10 @@ class SharedStreamingContextBeforeAfterEachTest
   extends org.specs2.Specification 
   with org.specs2.matcher.MustThrownExpectations 
   with org.specs2.matcher.ResultMatchers
-  with SharedStreamingContextBeforeAfterEach
-  with Logging {
+  with SharedStreamingContextBeforeAfterEach {
+  
+  // cannot use private[this] due to https://issues.scala-lang.org/browse/SI-8087
+  @transient private val logger = Logger(LoggerFactory.getLogger("SharedStreamingContextBeforeAfterEachTest"))
   
   // Spark configuration
   override def sparkMaster : String = "local[5]"
@@ -32,7 +38,7 @@ class SharedStreamingContextBeforeAfterEachTest
       where a simple queueStream test must be successful $successfulSimpleQueueStreamTest
       where a simple queueStream test can also fail $failingSimpleQueueStreamTest
     """      
-      
+            
   def successfulSimpleQueueStreamTest = simpleQueueStreamTest(expectedCount = 0)
   def failingSimpleQueueStreamTest = simpleQueueStreamTest(expectedCount = 1) must beFailing
         
@@ -54,21 +60,25 @@ class SharedStreamingContextBeforeAfterEachTest
       println(s"completed batch number $batchCount: ${rdd.collect.mkString(",")}")
       result = result and AsResult {
         rdd.filter(_!= record).count() === expectedCount
-        rdd.collect{case record => true}.toLocalIterator.hasNext must beTrue
+        rdd should existsRecord(_ == "hola")
       }
     }
     sizesDStream.foreachRDD { rdd =>
-      result = result and AsResult {
-        rdd.filter(_!= record.length).count() === 0
+      result = result and AsResult { 
+        rdd should foreachRecord(record.length)(len => _ == len)      
       }
     }
     
-    // only start the dstream after all the transformations and actions have been defined
+    // should only start the dstream after all the transformations and actions have been defined
     ssc.start()
     
     // wait for completion of batches.length batches
-    StreamingContextUtils.awaitForNBatchesCompleted(batches.length)(ssc)
+    StreamingContextUtils.awaitForNBatchesCompleted(batches.length, atMost = 10 seconds)(ssc)
     
     result
   }
 }
+ 
+ 
+
+  
