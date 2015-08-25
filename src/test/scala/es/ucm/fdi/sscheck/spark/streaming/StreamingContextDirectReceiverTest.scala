@@ -217,7 +217,6 @@ class StreamingContextDirectReceiverTest
       logger.warn(s"starting test case $testCaseId")
       
       // add current test case to inputDStream
-      // inputDStream.addDStream(testCaseDstream.map(_.map((testCaseId, _)))) FIXME
       inputDStream.addDStream(testCaseDstream.map({ batch =>
         // Invariant: for each test case and batch, we have either a 
         // single None, or many Some
