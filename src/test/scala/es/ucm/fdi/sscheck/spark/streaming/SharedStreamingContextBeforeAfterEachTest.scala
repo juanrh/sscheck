@@ -2,7 +2,7 @@ package es.ucm.fdi.sscheck.spark.streaming
 
 import org.junit.runner.RunWith
 import org.specs2.runner.JUnitRunner 
-import org.specs2.execute.{AsResult,Result}
+import org.specs2.execute.Result
 
 import org.apache.spark.streaming.Duration
 import org.apache.spark.rdd.RDD
@@ -58,13 +58,13 @@ class SharedStreamingContextBeforeAfterEachTest
     inputDStream.foreachRDD { rdd =>
       batchCount += 1
       println(s"completed batch number $batchCount: ${rdd.collect.mkString(",")}")
-      result = result and AsResult {
+      result = result and {
         rdd.filter(_!= record).count() === expectedCount
         rdd should existsRecord(_ == "hola")
       }
     }
     sizesDStream.foreachRDD { rdd =>
-      result = result and AsResult { 
+      result = result and { 
         rdd should foreachRecord(record.length)(len => _ == len)      
       }
     }
