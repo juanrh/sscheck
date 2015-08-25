@@ -2,6 +2,8 @@ package es.ucm.fdi.sscheck.spark.streaming
 
 import org.specs2.specification.BeforeAfterEach
 
+import org.apache.spark.streaming.StreamingContext
+  
 import es.ucm.fdi.sscheck.spark.SharedSparkContextBeforeAfterAll
 
 /** Shares a Spark Context among all the test in a Specs2 suite, and provides a StreamingContext 
@@ -40,4 +42,8 @@ trait SharedStreamingContextBeforeAfterEach
     require(! _ssc.isEmpty)
     super[SharedStreamingContext].close()
   }
+  
+  /** Make implicitly available the StreamingContext 
+   * */                      		  
+  implicit def impSSC : StreamingContext = this.ssc()
 }
