@@ -19,7 +19,8 @@ import org.slf4j.LoggerFactory
  * */
 class DynSeqQueueInputDStream [A: ClassTag](
     @transient _ssc : StreamingContext,
-    val numSlices : Int = 2
+    val numSlices : Int = 2,
+    val verbose : Boolean = false
   ) extends InputDStream[A](_ssc) {
   
   // cannot use private[this] due to https://issues.scala-lang.org/browse/SI-8087
@@ -61,10 +62,10 @@ class DynSeqQueueInputDStream [A: ClassTag](
     dstreams = dstreamsAndBatch._1
     val batch = dstreamsAndBatch._2
     
-    logger.warn(s"dstreams = $dstreams")
+    if (verbose) { logger.warn(s"dstreams = $dstreams") }
      
     if (batch.size > 0) {
-      logger.warn(s"computing batch ${batch.mkString(",")}")
+      logger.debug(s"computing batch ${batch.take(10).mkString(",")}")
       
       // copied from DirectKafkaInputDStream
       // Report the record number of this batch interval to InputInfoTracker.
