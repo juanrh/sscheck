@@ -57,7 +57,7 @@ class ScalaCheckStreamingTest
         (  inputBatch should foreachRecord(_ == 0) or 
            (inputBatch should foreachRecord(_ == 1)) 
         )
-      }).set(workers = 1, minTestsOk = 10).verbose      
+      }).set(minTestsOk = 10).verbose      
 
   def faultyCount(ds : DStream[Double]) : DStream[Long] = 
     ds.count.transform(_.map(_ - 1))
@@ -69,5 +69,5 @@ class ScalaCheckStreamingTest
       (inputBatch : RDD[Double], transBatch : RDD[Long]) => {
         transBatch.count === 1 and
         inputBatch.count === transBatch.first
-      }).set(workers = 1, minTestsOk = 10).verbose         
+      }).set(minTestsOk = 10).verbose         
 }
