@@ -39,8 +39,8 @@ class ScalaCheckStreamingTest
     sequential ^ s2"""
     Simple properties for Spark Streaming
       - where the first property is a success $prop1
-      - where a simple property for DStream.count is a success ${meanProp(_.count)}
-      - where a faulty implementation of the DStream.count is detected ${meanProp(faultyCount) must beFailing}
+      - where a simple property for DStream.count is a success ${countProp(_.count)}
+      - where a faulty implementation of the DStream.count is detected ${countProp(faultyCount) must beFailing}
     """    
       
   def prop1 = 
@@ -62,7 +62,7 @@ class ScalaCheckStreamingTest
   def faultyCount(ds : DStream[Double]) : DStream[Long] = 
     ds.count.transform(_.map(_ - 1))
     
-  def meanProp(testSubject : DStream[Double] => DStream[Long]) = 
+  def countProp(testSubject : DStream[Double] => DStream[Long]) = 
     DStreamProp.forAllAlways(
       Gen.listOfN(10,  Gen.listOfN(30, arbitrary[Double])))(
       testSubject)( 
