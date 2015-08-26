@@ -24,13 +24,16 @@ class ScalaCheckStreamingTest
   with org.specs2.matcher.ResultMatchers
   with ScalaCheck {
     
-  override def sparkMaster : String = "local[*]"
-  override def batchDuration = Duration(100)
+  override def sparkMaster : String = "local[5]"
+  override def batchDuration = Duration(350)
+  override def defaultParallelism = 4  
   
-  val batchSize = 30  
-  val zeroSeqSeq = Gen.listOfN(10,  Gen.listOfN(batchSize, 0)) 
-  val oneSeqSeq = Gen.listOfN(10, Gen.listOfN(batchSize, 1)) 
-  val dsgenSeqSeq1 = Gen.oneOf(zeroSeqSeq, oneSeqSeq)  
+  val batchSize = 30   
+  val dsgenSeqSeq1 = {
+    val zeroSeqSeq = Gen.listOfN(10,  Gen.listOfN(batchSize, 0)) 
+    val oneSeqSeq = Gen.listOfN(10, Gen.listOfN(batchSize, 1))
+    Gen.oneOf(zeroSeqSeq, oneSeqSeq)  
+  }
   
   def is = 
     sequential ^ s2"""
@@ -48,6 +51,7 @@ class ScalaCheckStreamingTest
         transformedDs
       })( 
       (inputBatch : RDD[Int], transBatch : RDD[Int]) => {
+        inputBatch.count === batchSize and 
         inputBatch.count === transBatch.count and
         (inputBatch.intersection(transBatch).isEmpty should beTrue) and
         (  inputBatch should foreachRecord(_ == 0) or 
