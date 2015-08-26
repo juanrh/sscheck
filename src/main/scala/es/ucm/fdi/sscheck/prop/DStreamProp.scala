@@ -30,6 +30,12 @@ import es.ucm.fdi.sscheck.{TestCaseIdCounter,PropResult,TestCaseId,TestCaseRecor
   
 class PropExecutionException(msg : String)
   extends RuntimeException(msg) 
+object TestCaseTimeoutException {
+  def apply(batchInterval : Long, batchCompletionTimeout : Long) : TestCaseTimeoutException = {
+    val msg = s"Timeout to complete batch after ${batchCompletionTimeout} ms, expected batch interval was ${batchInterval} ms"
+    new TestCaseTimeoutException(msg = msg)
+  }
+}
 case class TestCaseTimeoutException(msg : String)
   extends PropExecutionException(msg)
 
@@ -130,19 +136,19 @@ ${rdd.take(numSampleRecords).mkString(lineSeparator)}
         // await for the end of the each batch 
         logger.debug(s"waiting end of batch ${i} of test case ${testCaseId} at thread ${Thread.currentThread()}")
           // use the SyncVar to wait for batch completion
-        // onBatchCompletedSyncVar.take()
         Try {
           onBatchCompletedSyncVar.take(batchCompletionTimeout)
         } match {
           case Success(_) => {}
           case Failure(_) => {
-            val msg = s"Timeout to complete batch after ${batchCompletionTimeout} ms, expected batch intervarl was ${batchInterval} ms"
-            logger.error(msg)
+            val e = TestCaseTimeoutException(batchInterval= batchInterval, 
+                                             batchCompletionTimeout = batchCompletionTimeout)
+            logger.error(e.getMessage)
             Try { ssc.stop(stopSparkContext = false, stopGracefully = false) }
             // This exception will make the test case fail, in this case the 
             // failing test case is not important as this is a performance problem, not 
             // a counterexample that has been found
-            throw TestCaseTimeoutException(msg)
+            throw e
           }
         }      
         logger.debug(s"awake after end of batch ${i} of test case ${testCaseId} at thread ${Thread.currentThread()}")        
