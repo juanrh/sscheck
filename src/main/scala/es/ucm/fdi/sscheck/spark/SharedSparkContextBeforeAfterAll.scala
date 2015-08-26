@@ -46,13 +46,14 @@ trait SharedSparkContextBeforeAfterAll
    *  override in subclass for custom parallelism
    */
   def defaultParallelism: Int = 2
+  
   /** Make implicitly available the value of parallelism finally set for this object
    * */
-  @transient implicit lazy val parallelism = Parallelism(defaultParallelism)  
+  implicit lazy val parallelism = Parallelism(defaultParallelism)  
 }
 
 /** Case class wrapping the number of partitions to use when parallelizing sequences
  *  to Spark, a type different from Int allows us to be more specified when requiring
  *  implicit parameters in functions
  * */
-case class Parallelism(val numSlices : Int)
+case class Parallelism(val numSlices : Int) extends Serializable
