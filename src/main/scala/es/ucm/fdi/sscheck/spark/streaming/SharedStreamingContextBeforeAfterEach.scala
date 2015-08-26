@@ -39,7 +39,8 @@ trait SharedStreamingContextBeforeAfterEach
   /** Close the StreamingContext after the test
    */
   override def after : Unit = {
-    require(! _ssc.isEmpty)
+    // We don't require ! _ssc.isEmpty, as it 
+    // might have been already closed by a failing ScalaCheck Prop
     super[SharedStreamingContext].close()
   }
   

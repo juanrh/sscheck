@@ -17,6 +17,7 @@ import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.scheduler.{StreamingListener, StreamingListenerBatchCompleted}
 import scala.reflect.ClassTag
 import scala.concurrent.SyncVar
+import scala.util.{Try, Success, Failure}
 
 import com.typesafe.scalalogging.slf4j.Logger
 import org.slf4j.LoggerFactory
@@ -27,6 +28,11 @@ import org.apache.spark.streaming.dstream.DynSeqQueueInputDStream
 import es.ucm.fdi.sscheck.spark.Parallelism
 import es.ucm.fdi.sscheck.{TestCaseIdCounter,PropResult,TestCaseId,TestCaseRecord}
   
+class PropExecutionException(msg : String)
+  extends RuntimeException(msg) 
+case class TestCaseTimeoutException(msg : String)
+  extends PropExecutionException(msg)
+
 object DStreamProp {
   @transient private val logger = Logger(LoggerFactory.getLogger("DStreamProp"))
   
@@ -63,10 +69,19 @@ ${rdd.take(numSampleRecords).mkString(lineSeparator)}
       // NOTE: batch cannot be completed until this code finishes, use
       // future if needed to avoid blocking the batch
       if ((! propResult.isDefined) && input1Batch.count > 0) {  
+//        val thisBatchResult = {
+//          val trans1Batch = transformedStream1.slice(time, time).head
+//          AsResult { assertions(input1Batch, trans1Batch) }
+//        }
         val thisBatchResult = {
-          val trans1Batch = transformedStream1.slice(time, time).head
-          AsResult { assertions(input1Batch, trans1Batch) }
+          val trans1Batches = transformedStream1.slice(time, time)
+          if (trans1Batches.length > 0) {
+            AsResult { assertions(input1Batch, trans1Batches.head) }
+          } else {
+            StandardResults.success 
+          }
         }
+        
         if (thisBatchResult.isFailure || thisBatchResult.isError || thisBatchResult.isThrownFailure) {
           // Checking according to https://etorreborre.github.io/specs2/guide/SPECS2-3.6.2/org.specs2.guide.StandardResults.html 
           // Invariant: propResult is assigned to Some at most once, only for the first counterexample 
@@ -82,7 +97,8 @@ ${rdd.take(numSampleRecords).mkString(lineSeparator)}
     // test case id counter / generator
     val testCaseIdCounter = new TestCaseIdCounter
     // won't wait for each batch for more than batchCompletionTimeout milliseconds
-    val batchCompletionTimeout = inputDStream1.slideDuration.milliseconds * 10
+    val batchInterval = inputDStream1.slideDuration.milliseconds
+    val batchCompletionTimeout = batchInterval * 1000 // give a good margin, values like 5 lead to spurious errors
     // the worker thread uses the SyncVar with a registered addStreamingListener
     // that notifies onBatchCompleted.
     // Note: no need to wait for receiver, as there is no receiver
@@ -113,12 +129,28 @@ ${rdd.take(numSampleRecords).mkString(lineSeparator)}
       for (i <- 1 to testCaseDstream.length if (! propFailed)) {
         // await for the end of the each batch 
         logger.debug(s"waiting end of batch ${i} of test case ${testCaseId} at thread ${Thread.currentThread()}")
-        onBatchCompletedSyncVar.take(batchCompletionTimeout) // use the SyncVar to wait for batch completion  
+          // use the SyncVar to wait for batch completion
+        // onBatchCompletedSyncVar.take()
+        Try {
+          onBatchCompletedSyncVar.take(batchCompletionTimeout)
+        } match {
+          case Success(_) => {}
+          case Failure(_) => {
+            val msg = s"Timeout to complete batch after ${batchCompletionTimeout} ms, expected batch intervarl was ${batchInterval} ms"
+            logger.error(msg)
+            Try { ssc.stop(stopSparkContext = false, stopGracefully = false) }
+            // This exception will make the test case fail, in this case the 
+            // failing test case is not important as this is a performance problem, not 
+            // a counterexample that has been found
+            throw TestCaseTimeoutException(msg)
+          }
+        }      
         logger.debug(s"awake after end of batch ${i} of test case ${testCaseId} at thread ${Thread.currentThread()}")        
         if (propResult.isDefined) {
           // some batch generated a counterexample
           propFailed = true  
           testCaseResult = propResult.get
+          Try { ssc.stop(stopSparkContext = false, stopGracefully = false) }
         }
         // else do nothing, as the data is already sent 
       }
