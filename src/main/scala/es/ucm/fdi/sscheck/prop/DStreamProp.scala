@@ -27,6 +27,7 @@ import scala.util.Properties.lineSeparator
 import org.apache.spark.streaming.dstream.DynSeqQueueInputDStream
 import es.ucm.fdi.sscheck.spark.Parallelism
 import es.ucm.fdi.sscheck.{TestCaseIdCounter,PropResult,TestCaseId,TestCaseRecord}
+import tl.Formula
   
 class PropExecutionException(msg : String)
   extends RuntimeException(msg) 
@@ -169,4 +170,13 @@ ${rdd.take(numSampleRecords).mkString(lineSeparator)}
       AsResultProp.asResultToProp(testCaseResult)
     } 
   }
+  
+  def forAll[E1:ClassTag,E2:ClassTag,P]
+    (g1: Gen[Seq[Seq[E1]]])(gt1 : (DStream[E1]) => DStream[E2])
+    //(assertions: (RDD[E1], RDD[E2]) => P)
+    (formula : Formula[(RDD[E1], RDD[E2])])
+    (implicit pv: P => Prop, rv : P => Result, pp1: Seq[Seq[E1]] => Pretty, 
+                            ssc : StreamingContext, parallelism : Parallelism): Prop = {
+  ???
+ }
 }
