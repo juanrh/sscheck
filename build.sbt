@@ -6,6 +6,8 @@ version := "1.0"
 
 scalaVersion := "2.10.5"
 
+crossScalaVersions  := Seq("2.10.5")
+
 lazy val sparkVersion = "1.4.1"
 
 lazy val specs2Version = "3.6.4" 
@@ -56,4 +58,3 @@ resolvers ++= Seq(
   "scalaz-bintray" at "http://dl.bintray.com/scalaz/releases",
   "Spark Packages Repo" at "http://dl.bintray.com/spark-packages/maven"
 )
-
