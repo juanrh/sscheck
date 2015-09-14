@@ -29,7 +29,7 @@ class FormulaTest
   type Form = Formula[U]
   val (i, s) = ((_ : U)._1, (_ : U)._2)
   // some atomic propositions
-  val aP = at(i)(_  must be_>(2))
+  val aP : Form = at(i)(_  must be_>(2))
   val aQ = at(s)(_ contains "hola")
       
   def exampleFormulas = {         
@@ -39,7 +39,7 @@ class FormulaTest
     val alwaysP = always (aP) during 6
     
     // note there are no exceptions due to suspended evaluation
-    Now ((x : Any) => 1 === 0)
+    // Now ((x : Any) => 1 === 0)
     
     val pUntilQ = aP until aQ on 4
     val pUntilQExplicitTimeout = aP until aQ on Timeout(4)
@@ -55,12 +55,31 @@ class FormulaTest
   def nextFormulaOk = {
     (later(aP) on 1). nextFormula === aP
     (later(aP) on 2). nextFormula === (aP or next(aP)) 
-    (later(aP) on 3). nextFormula === (aP or next(aP) or next(next(aP)))
+    (later(aP) on 3). nextFormula === or(aP, next(aP), next(next(aP))) 
     
     (always(aP) during 1). nextFormula === aP
     (always(aP) during 2). nextFormula === (aP and next(aP)) 
-    (always(aP) during 3). nextFormula === (aP and next(aP) and next(next(aP)))
+    (always(aP) during 3). nextFormula === and(aP, next(aP), next(next(aP)))
+    
+    (aP until aQ on 1). nextFormula === aQ
+    (aP until aQ on 2). nextFormula === or(aQ, and(aP, next(aQ))) 
+    (aP until aQ on 3). nextFormula === 
+      or(aQ, and(aP, next(aQ)), and(aP, next(aP), next(next(aQ))))
+      
+    (aP release aQ on 1).nextFormula === or(aQ, and(aP, aQ))
+    (aP release aQ on 2).nextFormula === 
+      or(and(aQ, next(aQ)), 
+         and(aP, aQ),
+         and(aQ, next(aP), next(aQ))
+      )
+    (aP release aQ on 3).nextFormula ===
+      or(and(aQ, next(aQ), next(next(aQ))), 
+         and(aP, aQ),
+         and(aQ, next(aP), next(aQ)),
+         and(aQ, next(aQ), next(next(aP)), next(next(aQ)))
+      )
     
     // TODO: add assertions for each of the case classes 
+    ok
   }
 }
