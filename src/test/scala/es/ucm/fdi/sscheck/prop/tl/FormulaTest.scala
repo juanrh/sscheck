@@ -22,6 +22,7 @@ class FormulaTest
     Basic test for temporal logic formulas representation
       - where some example formulas are correctly built $exampleFormulas
       - where nextFormula is defined correctly $nextFormulaOk
+      - where examples from the paper for nextFormula work as expected $nextFormulaPaper 
       - where evaluation with consume works correclty $consumeOk
       - where safeWordLength is ok $pending
     """    
@@ -107,6 +108,14 @@ class FormulaTest
          and(aQ, next(aP), next(aQ)),
          and(aQ, next(aQ), next(next(aP)), next(next(aQ)))
       ) }
+  }
+  
+  def nextFormulaPaper = {
+    val phi = always (aQ ==> (later(aP) on 2)) during 2
+    println(s"phi.nextFormula ${phi.nextFormula}")
+    phi.nextFormula ===  
+     ( (!aQ or (aP or next(aP))) and 
+       next(!aQ or (aP or next(aP))) )
   }
   
   def consumeOk = {
