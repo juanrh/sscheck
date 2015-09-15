@@ -2,8 +2,12 @@ package es.ucm.fdi.sscheck.prop.tl
 
 import org.specs2.execute.{Result,AsResult}
 import org.specs2.scalacheck.AsResultProp
-import org.scalacheck.Prop 
+import org.scalacheck.Prop
 import org.scalacheck.Prop.{undecided, proved, passed, exception, falsified}
+
+import scalaz.syntax.std.boolean._
+
+import scala.annotation.tailrec
 
 object Formula {
   /** More succinct notation for timeouts when combined with TimeoutMissingFormula.on()  
@@ -16,7 +20,7 @@ object Formula {
   /** More succinct notation for Now formulas
    */
   implicit def resultFunToNow[T, R <% Result](p : T => R) : Now[T] = Now(p)
-  implicit def propFunToNow[T](p : T => Prop) : Now[T] = Now(p)  
+  implicit def propStatusFunToNow[T](p : T => Prop.Status) : Now[T] = Now(p)
   
   /** Builds a Now formula of type T by composing the projection proj on 
    *  T with an the assertion function p
@@ -37,7 +41,6 @@ object Formula {
   def later[T](phi : Formula[T]) = eventually(phi)
   def always[T](phi : Formula[T]) = new TimeoutMissingFormula[T](Always(phi, _))  
 }
-
 // using trait for the root of the AGT as recommended in http://twitter.github.io/effectivescala/
 sealed trait Formula[T] 
   extends Serializable {
@@ -55,17 +58,70 @@ sealed trait Formula[T]
   def release(phi2 : Formula[T]) = new TimeoutMissingFormula[T](Release(this, phi2, _))
 }
 
+/** Restricted class of formulas that are in a form suitable for the 
+ *  formula evaluation procedure
+ */
+sealed trait NextFormula[T] 
+  extends Formula[T] {
+  /** @return Option.Some if this formula is resolved, and Option.None
+   *  if it is still pending resolution when some additional values 
+   *  of type T corresponding to more time instants are provided with
+   *  a call to consume()
+   * */
+  def getResult : Option[Prop.Status] 
+  
+  /** @return a new formula resulting from progressing in the evaluation 
+   *  of this formula by consuming the new values atoms for the atomic 
+   *  propositions corresponding to the values of the element of the universe
+   *  at a new instant of time. This corresponds to the notion of "letter simplification" 
+   *  in the paper
+   */
+  def consume(atoms : T) : NextFormula[T]
+}
+
+/** Resolved formulas
+ * */
+// see https://github.com/rickynils/scalacheck/blob/1.12.2/src/main/scala/org/scalacheck/Prop.scala
+case class Solved[T](result : Prop.Status) extends NextFormula[T] {
+  override def safeWordLength = Timeout(0)
+  override def nextFormula = this
+  override def getResult = Some(result)
+  // do no raise an exception in call to consume, because with NextOr we will
+  // keep undecided prop values until the rest of the formula in unraveled
+  override def consume(atoms : T) = this
+}
+
 /** Formulas that have to be resolved now, which correspond to atomic proposition
  *  as functions from the current state of the system to Specs2 assertions. 
  *  Note this also includes top / true and bottom / false as constant functions
  */
 object Now {
-  def apply[T, R <% Result](p : T => R) : Now[T] = fromResultFun(p)
-  def fromResultFun[T, R <% Result](p : T => R) : Now[T] = new Now[T]((x : T) => { 
-    AsResultProp.asResultToProp(p(x))
-  })
+  def apply[T, R <% Result](p : T => R) : Now[T] = 
+    new Now[T]((x : T) => resultToPropStatus(p(x)))
+    
+  /** Convert a Specs2 Result into a ScalaCheck Prop.Status
+   * See 
+   * - trait Status: https://github.com/rickynils/scalacheck/blob/1.12.2/src/main/scala/org/scalacheck/Prop.scala
+   * - subclasses of Result: https://etorreborre.github.io/specs2/api/SPECS2-3.6.2/index.html#org.specs2.execute.Result
+   * and https://etorreborre.github.io/specs2/guide/SPECS2-3.6.2/org.specs2.guide.StandardResults.html
+   * */
+  @tailrec
+  def resultToPropStatus(result : Result) : Prop.Status = result match {
+    case err : org.specs2.execute.Error => Prop.Exception(err.t)
+    case _ : org.specs2.execute.Failure => Prop.False
+    case _ : org.specs2.execute.Pending => Prop.Undecided
+    case _ : org.specs2.execute.Skipped => Prop.Undecided
+    /* Prop.True is the same as passed, see lazy val passed 
+    * at https://github.com/rickynils/scalacheck/blob/1.12.2/src/main/scala/org/scalacheck/Prop.scala
+    * TOOD: use Prop.Proof instead?
+    */
+    case _ : org.specs2.execute.Success => Prop.True 
+    case dec : org.specs2.execute.DecoratedResult[_] => resultToPropStatus(dec.result)    
+    case _ => Prop.Undecided
+  } 
+  
 }
-case class Now[T](p : T => Prop) extends NextFormula[T] {
+case class Now[T](p : T => Prop.Status) extends NextFormula[T] {
   /* Note the case class structural equality gives an implementation
    * for equals equivalent to the one below, as a Function is only
    * equal to references to the same function, which corresponds to 
@@ -82,32 +138,140 @@ case class Now[T](p : T => Prop) extends NextFormula[T] {
     */
   override def safeWordLength = Timeout(1)
   override def nextFormula = this
-  override def getResult = ???
-  override def consume(atoms : T) = ???
+  override def getResult = None
+  override def consume(atoms : T) = Solved(p(atoms))
 }
-case class Not[T](phi : Formula[T]) extends NextFormula[T] {
+case class Not[T](phi : Formula[T]) extends Formula[T] {
   override def safeWordLength = phi safeWordLength
-  override def nextFormula = Not(phi.nextFormula)
-  override def getResult = ???
-  override def consume(atoms : T) = ???
+  override def nextFormula = new NextNot(phi.nextFormula)
 }
-case class Or[T](phis : Formula[T]*) extends NextFormula[T] {
+class NextNot[T](phi : NextFormula[T]) extends Not[T](phi) with NextFormula[T] {
+  override def getResult = None
+  /** Note in the implementation of or we add Exception to the truth lattice, 
+  * which always absorbs other values to signal a test evaluation error
+  * */
+  override def consume(atoms : T) = {
+    val phiConsumed = phi.consume(atoms)   
+    phiConsumed.getResult match {
+      case Some(result) => 
+        Solved (result match {
+          /* Prop.True is the same as passed, see lazy val passed 
+             * at https://github.com/rickynils/scalacheck/blob/1.12.2/src/main/scala/org/scalacheck/Prop.scala
+             * TODO: use Prop.Proof instead?
+             */
+          case Prop.True => Prop.False
+          case Prop.Proof => Prop.False
+          case Prop.False => Prop.True 
+          case Prop.Exception(e) => result 
+          case _ => Prop.Undecided
+        })
+      case None => new NextNot(phiConsumed)
+    }
+  }
+}
+
+case class Or[T](phis : Formula[T]*) extends Formula[T] {
   override def safeWordLength = phis.map(_.safeWordLength).maxBy(_.instants)
-  override def nextFormula = Or(phis.map(_.nextFormula):_*)
-  override def getResult = ???
-  override def consume(atoms : T) = ???
+  override def nextFormula = NextOr(phis.map(_.nextFormula):_*)
 }
-case class And[T](phis : Formula[T]*) extends NextFormula[T] {
+object NextOr {
+  def apply[T](phis : NextFormula[T]*) : NextFormula[T] = if (phis.length == 1) phis(0) else new NextOr(phis:_*)
+  /** @return the result of computing the or of s1 and s2 in 
+   *  the lattice of truth values, adding Exception which always
+   *  absorbs other values to signal a test evaluation error
+   */
+  private def call(s1 : Prop.Status, s2 : Prop.Status) : Prop.Status = 
+    (s1, s2) match {
+      case (Prop.Exception(_), _) => s1
+      case (_, Prop.Exception(_)) => s2
+      case (Prop.True, _) => Prop.True
+      case (Prop.Proof, _) => Prop.Proof
+      case (Prop.Undecided, Prop.False) => Prop.Undecided
+      case _ => s2
+  }  
+}
+class NextOr[T](phis : NextFormula[T]*) extends Or(phis:_*) with NextFormula[T] {
+  override def getResult = None
+  override def consume(atoms : T) = {
+    val (phisDefined, phisUndefined) = phis.view
+      .map { _.consume(atoms) }
+      .partition { _.getResult.isDefined }            
+    val definedStatus = (phisDefined.size > 0) option {
+      phisDefined
+      .map { _.getResult.get }
+      .reduce { NextOr.call(_, _) }}     
+    // short-circuit or if possible. Note an edge case when all the phis
+    // are defined after consuming the input, but we might still not have a
+    // positive (true of proof) result         
+    if ((definedStatus.isDefined && (definedStatus.get == Prop.True || definedStatus.get == Prop.Proof))
+        || phisUndefined.size == 0) {
+      Solved(definedStatus.getOrElse(Prop.Undecided))
+    } else {
+      // if definedStatus is undecided keep it in case 
+      // the rest of the or is reduced to false later on
+      val newPhis = definedStatus match {
+        case Some(Prop.Undecided) => Solved[T](Prop.Undecided) +: phisUndefined.force
+        case _ => phisUndefined.force
+      } 
+      new NextOr(newPhis :_*)
+    }
+  }
+} 
+
+case class And[T](phis : Formula[T]*) extends Formula[T] {
   override def safeWordLength = phis.map(_.safeWordLength).maxBy(_.instants)
-  override def nextFormula = And(phis.map(_.nextFormula):_*)
-  override def getResult = ???
-  override def consume(atoms : T) = ???
+  override def nextFormula = NextAnd(phis.map(_.nextFormula):_*)
 }
-case class Implies[T](phi1 : Formula[T], phi2 : Formula[T]) extends NextFormula[T] {
+object NextAnd {
+  def apply[T](phis : NextFormula[T]*) = if (phis.length == 1) phis(0) else new NextAnd(phis:_*)
+  /** @return the result of computing the and of s1 and s2 in 
+   *  the lattice of truth values
+   */
+  private def call(s1 : Prop.Status, s2 : Prop.Status) : Prop.Status = 
+    (s1, s2) match {
+      case (Prop.Exception(_), _) => s1
+      case (_, Prop.Exception(_)) => s2
+      case (Prop.False, _) => Prop.False
+      case (_, Prop.False) => Prop.False
+      case (Prop.Undecided, _) => Prop.Undecided
+      case (Prop.True, _) => s2
+      case (Prop.Proof, _) => s2
+  }
+}
+/* TODO: some refactoring could be performed so NextAnd and NextOr inherit from a 
+ * common base class, due to very similar definitions of consume() and even of
+ * call() in their corresponding companions
+ * */
+class NextAnd[T](phis : NextFormula[T]*) extends And(phis:_*) with NextFormula[T] {
+  override def getResult = None
+  override def consume(atoms : T) = {
+    val (phisDefined, phisUndefined) = phis.view
+      .map { _.consume(atoms) }
+      .partition { _.getResult.isDefined }     
+    val definedStatus = (phisDefined.size > 0) option {
+      phisDefined
+      .map { _.getResult.get }
+      .reduce { NextAnd.call(_, _) }}  
+    // short-circuit and if possible. Note an edge case when all the phis
+    // are defined after consuming the input, but we might still not have a
+    // positive (true of proof) result
+    if ((definedStatus.isDefined && definedStatus.get == Prop.False) 
+        || phisUndefined.size == 0) {
+      Solved(definedStatus.getOrElse(Prop.Undecided))
+    } else {
+      // if definedStatus is undecided keep it in case 
+      // the rest of the and is reduced to true later on
+      val newPhis = definedStatus match {
+        case Some(Prop.Undecided) => Solved[T](Prop.Undecided) +: phisUndefined.force
+        case _ => phisUndefined.force
+      }
+      new NextOr(newPhis :_*)
+    }
+  }
+}
+case class Implies[T](phi1 : Formula[T], phi2 : Formula[T]) extends Formula[T] {
   override def safeWordLength = phi1.safeWordLength max phi2.safeWordLength
-  override def nextFormula = Implies(phi1.nextFormula, phi2.nextFormula)
-  override def getResult = ???
-  override def consume(atoms : T) = ???
+  override def nextFormula = NextOr(new NextNot(phi1.nextFormula), phi2.nextFormula)
 }
 object Next {
   /** @return a formula corresponding to n applications of 
@@ -115,20 +279,25 @@ object Next {
    */
   def apply[T](n : Int)(phi : Formula[T]) : Formula[T] = 
     (1 to n).foldLeft(phi) { (f, _) => new Next[T](f) }
-  
+}
+case class Next[T](phi : Formula[T]) extends Formula[T] {
+  import Formula.intToTimeout
+  override def safeWordLength = phi.safeWordLength + 1
+  override def nextFormula = NextNext(phi.nextFormula)
+}
+object NextNext {
+  def apply[T](phi : NextFormula[T]) : NextFormula[T] = new NextNext(phi)
   /** @return a next formula corresponding to n applications of 
    *  next on phi
    */
-  def nNextF[T](n : Int)(phi : NextFormula[T]) : NextFormula[T] =
-    (1 to n).foldLeft(phi) { (f, _) => new Next[T](f) }
+  def apply[T](n : Int)(phi : NextFormula[T]) : NextFormula[T] =
+    (1 to n).foldLeft(phi) { (f, _) => new NextNext(f) }
 }
-case class Next[T](phi : Formula[T]) extends NextFormula[T] {
-  import Formula.intToTimeout
-  override def safeWordLength = phi.safeWordLength + 1
-  override def nextFormula = Next(phi.nextFormula)
-  override def getResult = ???
-  override def consume(atoms : T) = ???
+class NextNext[T](phi : NextFormula[T]) extends Next[T](phi) with NextFormula[T] {
+  override def getResult = None
+  override def consume(atoms : T) = phi
 }
+
 case class Eventually[T](phi : Formula[T], t : Timeout) extends Formula[T] {
   require(t.instants >=1, s"timeout must be greater or equal than 1, found ${t}")
   
@@ -136,7 +305,7 @@ case class Eventually[T](phi : Formula[T], t : Timeout) extends Formula[T] {
   override def safeWordLength = phi.safeWordLength + t - 1
   
   override def nextFormula = 
-    NextFormula.or(Seq.iterate(phi.nextFormula, t.instants) { Next(_) }:_*)
+    NextOr(Seq.iterate(phi.nextFormula, t.instants) { NextNext(_) }:_*)
 }
 case class Always[T](phi : Formula[T], t : Timeout) extends Formula[T] {
   require(t.instants >=1, s"timeout must be greater or equal than 1, found ${t}")
@@ -144,7 +313,7 @@ case class Always[T](phi : Formula[T], t : Timeout) extends Formula[T] {
   import Formula.intToTimeout
   override def safeWordLength = phi.safeWordLength + t - 1
   override def nextFormula =
-      NextFormula.and(Seq.iterate(phi.nextFormula, t.instants) { Next(_) }:_*)
+      NextAnd(Seq.iterate(phi.nextFormula, t.instants) { NextNext(_) }:_*)
 }
 case class Until[T](phi1 : Formula[T], phi2 : Formula[T], t : Timeout) extends Formula[T] {
   require(t.instants >=1, s"timeout must be greater or equal than 1, found ${t}")
@@ -152,11 +321,11 @@ case class Until[T](phi1 : Formula[T], phi2 : Formula[T], t : Timeout) extends F
   import Formula.intToTimeout
   override def safeWordLength = phi1.safeWordLength max phi2.safeWordLength + t - 1
   override def nextFormula = {
-    val phi1Nexts = Seq.iterate(phi1.nextFormula, t.instants - 1) { Next(_) } 
-    val phi2Nexts = Seq.iterate(phi2.nextFormula, t.instants) { Next(_) }
-    NextFormula.or { 
+    val phi1Nexts = Seq.iterate(phi1.nextFormula, t.instants - 1) { NextNext(_) } 
+    val phi2Nexts = Seq.iterate(phi2.nextFormula, t.instants) { NextNext(_) }
+    NextOr { 
       (0 until t.instants).map { i =>
-        NextFormula.and { 
+        NextAnd { 
           (0 until i).map { j => 
             phi1Nexts(j) 
           } :+ phi2Nexts(i) 
@@ -171,12 +340,12 @@ case class Release[T](phi1 : Formula[T], phi2 : Formula[T], t : Timeout) extends
   import Formula.intToTimeout
   override def safeWordLength = phi1.safeWordLength max phi2.safeWordLength + t - 1
   override def nextFormula = {
-    val phi1Nexts = Seq.iterate(phi1.nextFormula, t.instants) { Next(_) } 
-    val phi2Nexts = Seq.iterate(phi2.nextFormula, t.instants) { Next(_) }    
-    NextFormula.or { 
-      NextFormula.and (phi2Nexts:_*) +:
+    val phi1Nexts = Seq.iterate(phi1.nextFormula, t.instants) { NextNext(_) } 
+    val phi2Nexts = Seq.iterate(phi2.nextFormula, t.instants) { NextNext(_) }    
+    NextOr { 
+      NextAnd (phi2Nexts:_*) +:
       (0 until t.instants).map { i =>
-        NextFormula.and { 
+        NextAnd { 
           (0 until i).map { j => 
             phi2Nexts(j) 
           } ++ List(phi1Nexts(i), phi2Nexts(i)) 
@@ -184,30 +353,6 @@ case class Release[T](phi1 : Formula[T], phi2 : Formula[T], t : Timeout) extends
       } 
     :_* }
   }
-}
-
-object NextFormula {
-  def or[T](phis : NextFormula[T]*) = if (phis.length == 1) phis(0) else Or(phis:_*)
-  def and[T](phis : NextFormula[T]*) = if (phis.length == 1) phis(0) else And(phis:_*)
-}
-/** Restricted class of formulas that are in a form suitable for the 
- *  formula evaluation procedure
- */
-sealed trait NextFormula[T] 
-  extends Formula[T] {
-  /** @return Option.Some if this formula is resolved, and Option.None
-   *  if it is still pending resolution when some additional values 
-   *  of type T corresponding to more time instants are provided with
-   *  a call to consume()
-   * */
-  def getResult : Option[Result] 
-  
-  /** @return a new formula resulting from progressing in the evaluation 
-   *  of this formula by consuming the new values atoms for the atomic 
-   *  propositions corresponding to a new instant of time. This corresponds
-   *  to the notion of "letter simplification" in the paper
-   */
-  def consume(atoms : T) : NextFormula[T]
 }
  
 /** Case class wrapping the number of instants / turns a temporal
@@ -238,6 +383,3 @@ class TimeoutMissingFormula[T](val toFormula : Timeout => Formula[T])
    */
   def during(t : Timeout) = on(t)
 }
-
-
-
