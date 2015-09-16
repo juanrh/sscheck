@@ -1,6 +1,6 @@
 package es.ucm.fdi.sscheck.prop.tl
 
-import org.scalacheck.Gen
+import org.scalacheck.{Gen,Prop}
 import org.scalacheck.Arbitrary.arbitrary
 
 import org.junit.runner.RunWith
@@ -112,7 +112,6 @@ class FormulaTest
   
   def nextFormulaPaper = {
     val phi = always (aQ ==> (later(aP) on 2)) during 2
-    println(s"phi.nextFormula ${phi.nextFormula}")
     phi.nextFormula ===  
      ( (!aQ or (aP or next(aP))) and 
        next(!aQ or (aP or next(aP))) )
@@ -128,19 +127,45 @@ class FormulaTest
     val aL : U = (1, 0) // only a holds
     val bL : U = (0, 1) // only b holds
     val abL : U = (1, 1) // both a and b hold
-    val phi = always (b ==> (later(a) on 2)) during 2
-    val phiNF = phi.nextFormula
-    println(s"phiNF: $phiNF")
+    val phi = always (b ==> (later(a) on 2)) during 2    
+    val psi = b until next(a and next(a)) on 2
     
-    { phiNF.getResult === None } and 
     {
+      val phiNF = phi.nextFormula
+      println(s"phi: $phi")
+      println(s"phiNF: $phiNF")
       val phiNF1 = phiNF consume(bL)
       println(s"phiNF1: $phiNF1")
       val phiNF2 = phiNF1 consume(bL)
       println(s"phiNF2: $phiNF2")
-      //phiNF1.getResult must be(None)
-      println(phiNF2 consume(bL))
-      pending
+      // consuming a letter with a solution is ok and doesn't change the result
+      val phiNF3 = phiNF2 consume(bL)
+      println(s"phiNF3: $phiNF3")
+      ( phiNF.getResult must beNone ) and
+      ( phiNF1.getResult must beNone ) and 
+      ( phiNF2.getResult must beSome(Prop.False) ) and
+      ( phiNF2 must haveClass[Solved[_]] ) and
+      ( phiNF3 === phiNF2 )
+    } and {
+      val psiNF = psi.nextFormula
+      println
+      println(s"psi: $psi")
+      println(s"psiNF: $psiNF")
+      val psiNF1 = psiNF consume(bL)
+      println(s"psiNF1: $psiNF1")
+      val psiNF2 = psiNF1 consume(bL)
+      println(s"psiNF2: $psiNF2")
+      val psiNF3 = psiNF2 consume(abL)
+      println(s"psiNF3: $psiNF3")
+      val psiNF4 = psiNF3 consume(aL)
+      println(s"psiNF4: $psiNF4")
+      ( psiNF.getResult must beNone ) and
+      ( psiNF1.getResult must beNone ) and
+      ( psiNF2.getResult must beNone ) and
+      ( psiNF3.getResult must beNone ) and
+      ( psiNF4.getResult must beSome(Prop.True) ) and
+      ( psiNF4 must haveClass[Solved[_]] ) and
+      ( psiNF4.consume(aL) === psiNF4 )
     }
   }
 }

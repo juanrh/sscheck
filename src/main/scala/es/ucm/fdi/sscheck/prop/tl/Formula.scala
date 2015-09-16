@@ -162,8 +162,8 @@ class NextNot[T](phi : NextFormula[T]) extends Not[T](phi) with NextFormula[T] {
           case Prop.True => Prop.False
           case Prop.Proof => Prop.False
           case Prop.False => Prop.True 
-          case Prop.Exception(e) => result 
-          case _ => Prop.Undecided
+          case Prop.Exception(_) => result 
+          case Prop.Undecided => Prop.Undecided
         })
       case None => new NextNot(phiConsumed)
     }
@@ -188,7 +188,7 @@ object NextOr {
       case (Prop.Proof, _) => Prop.Proof
       case (Prop.Undecided, Prop.False) => Prop.Undecided
       case _ => s2
-  }  
+    }  
 }
 class NextOr[T](phis : NextFormula[T]*) extends Or(phis:_*) with NextFormula[T] {
   override def getResult = None
@@ -196,15 +196,18 @@ class NextOr[T](phis : NextFormula[T]*) extends Or(phis:_*) with NextFormula[T] 
     val (phisDefined, phisUndefined) = phis.view
       .map { _.consume(atoms) }
       .partition { _.getResult.isDefined }            
-    val definedStatus = (phisDefined.size > 0) option {
+    val definedStatus = (! phisDefined.isEmpty) option {
       phisDefined
       .map { _.getResult.get }
-      .reduce { NextOr.call(_, _) }}     
+      .reduce { NextOr.call(_, _) }
+      }     
     // short-circuit or if possible. Note an edge case when all the phis
     // are defined after consuming the input, but we might still not have a
     // positive (true of proof) result         
-    if ((definedStatus.isDefined && (definedStatus.get == Prop.True || definedStatus.get == Prop.Proof))
-        || phisUndefined.size == 0) {
+    if (definedStatus.isDefined && definedStatus.get.isInstanceOf[Prop.Exception])
+      Solved(definedStatus.get)
+    else if ((definedStatus.isDefined && (definedStatus.get == Prop.True || definedStatus.get == Prop.Proof))
+             || phisUndefined.size == 0) {
       Solved(definedStatus.getOrElse(Prop.Undecided))
     } else {
       // if definedStatus is undecided keep it in case 
@@ -213,7 +216,7 @@ class NextOr[T](phis : NextFormula[T]*) extends Or(phis:_*) with NextFormula[T] 
         case Some(Prop.Undecided) => Solved[T](Prop.Undecided) +: phisUndefined.force
         case _ => phisUndefined.force
       } 
-      new NextOr(newPhis :_*)
+      NextOr(newPhis :_*)
     }
   }
 } 
@@ -227,16 +230,16 @@ object NextAnd {
   /** @return the result of computing the and of s1 and s2 in 
    *  the lattice of truth values
    */
-  private def call(s1 : Prop.Status, s2 : Prop.Status) : Prop.Status = 
+  private def call(s1 : Prop.Status, s2 : Prop.Status) : Prop.Status =
     (s1, s2) match {
       case (Prop.Exception(_), _) => s1
       case (_, Prop.Exception(_)) => s2
       case (Prop.False, _) => Prop.False
-      case (_, Prop.False) => Prop.False
+      case (Prop.Undecided, Prop.False) => Prop.False
       case (Prop.Undecided, _) => Prop.Undecided
       case (Prop.True, _) => s2
       case (Prop.Proof, _) => s2
-  }
+    }
 }
 /* TODO: some refactoring could be performed so NextAnd and NextOr inherit from a 
  * common base class, due to very similar definitions of consume() and even of
@@ -248,15 +251,18 @@ class NextAnd[T](phis : NextFormula[T]*) extends And(phis:_*) with NextFormula[T
     val (phisDefined, phisUndefined) = phis.view
       .map { _.consume(atoms) }
       .partition { _.getResult.isDefined }     
-    val definedStatus = (phisDefined.size > 0) option {
+    val definedStatus = (! phisDefined.isEmpty) option {
       phisDefined
       .map { _.getResult.get }
-      .reduce { NextAnd.call(_, _) }}  
+      .reduce { NextAnd.call(_, _) }
+      }  
     // short-circuit and if possible. Note an edge case when all the phis
     // are defined after consuming the input, but we might still not have a
     // positive (true of proof) result
-    if ((definedStatus.isDefined && definedStatus.get == Prop.False) 
-        || phisUndefined.size == 0) {
+    if (definedStatus.isDefined && definedStatus.get.isInstanceOf[Prop.Exception])
+      Solved(definedStatus.get)
+    else if ((definedStatus.isDefined && definedStatus.get == Prop.False) 
+             || phisUndefined.size == 0) {
       Solved(definedStatus.getOrElse(Prop.Undecided))
     } else {
       // if definedStatus is undecided keep it in case 
@@ -265,7 +271,7 @@ class NextAnd[T](phis : NextFormula[T]*) extends And(phis:_*) with NextFormula[T
         case Some(Prop.Undecided) => Solved[T](Prop.Undecided) +: phisUndefined.force
         case _ => phisUndefined.force
       }
-      new NextOr(newPhis :_*)
+      NextAnd(newPhis :_*)
     }
   }
 }
