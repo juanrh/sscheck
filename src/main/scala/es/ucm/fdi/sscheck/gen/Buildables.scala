@@ -65,8 +65,8 @@ object Buildables {
     
   /** A Buildable for building an object DStream[T] from its batches of type Batch[T]
    * */
-  implicit def buildableDStreamFromBatch[T] : Buildable[Batch[T], DStream[T]] = 
-    mapBuildable((batches : List[Batch[T]]) => DStream(batches:_*))(
+  implicit def buildablePDStreamFromBatch[T] : Buildable[Batch[T], PDStream[T]] = 
+    mapBuildable((batches : List[Batch[T]]) => PDStream(batches:_*))(
                  implicitly[Buildable[Batch[T], List[Batch[T]]]])
   
   
