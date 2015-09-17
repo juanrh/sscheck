@@ -16,6 +16,7 @@ import org.apache.spark.streaming.dstream.DStream
 
 import es.ucm.fdi.sscheck.spark.streaming.SharedStreamingContextBeforeAfterEach
 import Formula._
+import es.ucm.fdi.sscheck.gen.{PDStreamGen,BatchGen}
 
 @RunWith(classOf[JUnitRunner])
 class DStreamPropTest 
@@ -30,7 +31,7 @@ class DStreamPropTest
   
     def is = sequential ^ s2"""
     Basic test for properties with temporal logic formulas
-      - where a simple forall always prop works ok ${countForallAlwaysProp(_.count)}   
+      - where a simple forall always prop works ok ${countForallAlwaysProp(_.count)}    
     """    
   //  - where FIXME $pending exampleFormulaProp
   
@@ -64,10 +65,10 @@ class DStreamPropTest
     } during numBatches // TODO numBatches+1 leads to undecided, add test for this
     
     DStreamProp.forAll(
-      Gen.listOfN(numBatches, Gen.listOfN(2, arbitrary[Double])))( // FIXME restore 30
+      PDStreamGen.ofN(numBatches, BatchGen.ofN(2, arbitrary[Double]))) ( // FIXME restore 30
       testSubject)(
       formula)
       .set(minTestsOk = 2).verbose
   }
-
+  
 }
