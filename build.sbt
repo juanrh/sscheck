@@ -14,6 +14,9 @@ lazy val specs2Version = "3.6.4"
 
 // Use `sbt doc` to generate scaladoc, more on chapter 14.8 of "Scala Cookbook"
 
+// show all the warnings: http://stackoverflow.com/questions/9415962/how-to-see-all-the-warnings-in-sbt-0-11
+scalacOptions ++= Seq("-feature", "-unchecked", "-deprecation")
+
 // if parallel test execution is not disabled and several test suites using
 // SparkContext (even through SharedSparkContext) are running then tests fail randomly
 parallelExecution := false
@@ -45,8 +48,6 @@ libraryDependencies += "org.specs2" %% "specs2-matcher-extra" % specs2Version
 libraryDependencies += "org.specs2" %% "specs2-junit" % specs2Version
 
 libraryDependencies += "io.github.nicolasstucki" %% "multisets" % "0.1"
-
-libraryDependencies += "holdenk" % "spark-testing-base" % "1.3.0_0.0.5"
 
 // note this is discontinued for scala 2.11, which uses https://github.com/typesafehub/scala-logging#contribution-policy
 libraryDependencies += "com.typesafe" % "scalalogging-log4j_2.10" % "1.1.0"
