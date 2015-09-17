@@ -141,9 +141,9 @@ class FormulaTest
       // consuming a letter with a solution is ok and doesn't change the result
       val phiNF3 = phiNF2 consume(bL)
       println(s"phiNF3: $phiNF3")
-      ( phiNF.getResult must beNone ) and
-      ( phiNF1.getResult must beNone ) and 
-      ( phiNF2.getResult must beSome(Prop.False) ) and
+      ( phiNF.result must beNone ) and
+      ( phiNF1.result must beNone ) and 
+      ( phiNF2.result must beSome(Prop.False) ) and
       ( phiNF2 must haveClass[Solved[_]] ) and
       ( phiNF3 === phiNF2 )
     } and {
@@ -159,11 +159,11 @@ class FormulaTest
       println(s"psiNF3: $psiNF3")
       val psiNF4 = psiNF3 consume(aL)
       println(s"psiNF4: $psiNF4")
-      ( psiNF.getResult must beNone ) and
-      ( psiNF1.getResult must beNone ) and
-      ( psiNF2.getResult must beNone ) and
-      ( psiNF3.getResult must beNone ) and
-      ( psiNF4.getResult must beSome(Prop.True) ) and
+      ( psiNF.result must beNone ) and
+      ( psiNF1.result must beNone ) and
+      ( psiNF2.result must beNone ) and
+      ( psiNF3.result must beNone ) and
+      ( psiNF4.result must beSome(Prop.True) ) and
       ( psiNF4 must haveClass[Solved[_]] ) and
       ( psiNF4.consume(aL) === psiNF4 )
     }

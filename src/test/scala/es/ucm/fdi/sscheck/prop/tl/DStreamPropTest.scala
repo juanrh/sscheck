@@ -1,4 +1,4 @@
-package es.ucm.fdi.sscheck.prop
+package es.ucm.fdi.sscheck.prop.tl
 
 import org.scalacheck.Gen
 import org.scalacheck.Arbitrary.arbitrary
@@ -12,26 +12,27 @@ import org.specs2.execute.Result
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.Duration
+import org.apache.spark.streaming.dstream.DStream
 
 import es.ucm.fdi.sscheck.spark.streaming.SharedStreamingContextBeforeAfterEach
-import tl.Formula
-import tl.Formula._
+import Formula._
 
 @RunWith(classOf[JUnitRunner])
 class DStreamPropTest 
-  extends Specification 
-  with MustThrownExpectations 
-  with SharedStreamingContextBeforeAfterEach 
+  extends Specification  
+  with SharedStreamingContextBeforeAfterEach
   with ScalaCheck {
   
+  // FIXME: change to not so small test sizes and number of tests
   override def sparkMaster : String = "local[5]"
   override def batchDuration = Duration(350)
   override def defaultParallelism = 4  
   
     def is = sequential ^ s2"""
-    Basic test for properties with temporal logic formulas 
-      - where FIXME $pending exampleFormulaProp
+    Basic test for properties with temporal logic formulas
+      - where a simple forall always prop works ok ${countForallAlwaysProp(_.count)}   
     """    
+  //  - where FIXME $pending exampleFormulaProp
   
   def exampleFormulaProp = {    
     DStreamProp.forAll(
@@ -52,5 +53,21 @@ class DStreamPropTest
     }
     ok
   } 
+  
+  def countForallAlwaysProp(testSubject : DStream[Double] => DStream[Long]) = {
+    type U = (RDD[Double], RDD[Long])
+    val (inBatch, transBatch) = ((_ : U)._1, (_ : U)._2)
+    val numBatches = 3 // 10
+    val formula : Formula[U] = always { (u : U) =>
+      transBatch(u).count === 1 and
+      inBatch(u).count === transBatch(u).first 
+    } during numBatches // TODO numBatches+1 leads to undecided, add test for this
+    
+    DStreamProp.forAll(
+      Gen.listOfN(numBatches, Gen.listOfN(2, arbitrary[Double])))( // FIXME restore 30
+      testSubject)(
+      formula)
+      .set(minTestsOk = 2).verbose
+  }
 
 }

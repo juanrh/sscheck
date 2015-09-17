@@ -3,7 +3,6 @@ package es.ucm.fdi.sscheck.prop.tl
 import org.specs2.execute.{Result,AsResult}
 import org.specs2.scalacheck.AsResultProp
 import org.scalacheck.Prop
-import org.scalacheck.Prop.{undecided, proved, passed, exception, falsified}
 
 import scalaz.syntax.std.boolean._
 
@@ -68,7 +67,7 @@ sealed trait NextFormula[T]
    *  of type T corresponding to more time instants are provided with
    *  a call to consume()
    * */
-  def getResult : Option[Prop.Status] 
+  def result : Option[Prop.Status] 
   
   /** @return a new formula resulting from progressing in the evaluation 
    *  of this formula by consuming the new values atoms for the atomic 
@@ -82,10 +81,10 @@ sealed trait NextFormula[T]
 /** Resolved formulas
  * */
 // see https://github.com/rickynils/scalacheck/blob/1.12.2/src/main/scala/org/scalacheck/Prop.scala
-case class Solved[T](result : Prop.Status) extends NextFormula[T] {
+case class Solved[T](res : Prop.Status) extends NextFormula[T] {
   override def safeWordLength = Timeout(0)
   override def nextFormula = this
-  override def getResult = Some(result)
+  override def result = Some(res)
   // do no raise an exception in call to consume, because with NextOr we will
   // keep undecided prop values until the rest of the formula in unraveled
   override def consume(atoms : T) = this
@@ -138,7 +137,7 @@ case class Now[T](p : T => Prop.Status) extends NextFormula[T] {
     */
   override def safeWordLength = Timeout(1)
   override def nextFormula = this
-  override def getResult = None
+  override def result = None
   override def consume(atoms : T) = Solved(p(atoms))
 }
 case class Not[T](phi : Formula[T]) extends Formula[T] {
@@ -146,15 +145,15 @@ case class Not[T](phi : Formula[T]) extends Formula[T] {
   override def nextFormula = new NextNot(phi.nextFormula)
 }
 class NextNot[T](phi : NextFormula[T]) extends Not[T](phi) with NextFormula[T] {
-  override def getResult = None
+  override def result = None
   /** Note in the implementation of or we add Exception to the truth lattice, 
   * which always absorbs other values to signal a test evaluation error
   * */
   override def consume(atoms : T) = {
     val phiConsumed = phi.consume(atoms)   
-    phiConsumed.getResult match {
-      case Some(result) => 
-        Solved (result match {
+    phiConsumed.result match {
+      case Some(res) => 
+        Solved (res match {
           /* Prop.True is the same as passed, see lazy val passed 
              * at https://github.com/rickynils/scalacheck/blob/1.12.2/src/main/scala/org/scalacheck/Prop.scala
              * TODO: use Prop.Proof instead?
@@ -162,7 +161,7 @@ class NextNot[T](phi : NextFormula[T]) extends Not[T](phi) with NextFormula[T] {
           case Prop.True => Prop.False
           case Prop.Proof => Prop.False
           case Prop.False => Prop.True 
-          case Prop.Exception(_) => result 
+          case Prop.Exception(_) => res 
           case Prop.Undecided => Prop.Undecided
         })
       case None => new NextNot(phiConsumed)
@@ -191,14 +190,14 @@ object NextOr {
     }  
 }
 class NextOr[T](phis : NextFormula[T]*) extends Or(phis:_*) with NextFormula[T] {
-  override def getResult = None
+  override def result = None
   override def consume(atoms : T) = {
     val (phisDefined, phisUndefined) = phis.view
       .map { _.consume(atoms) }
-      .partition { _.getResult.isDefined }            
+      .partition { _.result.isDefined }            
     val definedStatus = (! phisDefined.isEmpty) option {
       phisDefined
-      .map { _.getResult.get }
+      .map { _.result.get }
       .reduce { NextOr.call(_, _) }
       }     
     // short-circuit or if possible. Note an edge case when all the phis
@@ -246,14 +245,14 @@ object NextAnd {
  * call() in their corresponding companions
  * */
 class NextAnd[T](phis : NextFormula[T]*) extends And(phis:_*) with NextFormula[T] {
-  override def getResult = None
+  override def result = None
   override def consume(atoms : T) = {
     val (phisDefined, phisUndefined) = phis.view
       .map { _.consume(atoms) }
-      .partition { _.getResult.isDefined }     
+      .partition { _.result.isDefined }     
     val definedStatus = (! phisDefined.isEmpty) option {
       phisDefined
-      .map { _.getResult.get }
+      .map { _.result.get }
       .reduce { NextAnd.call(_, _) }
       }  
     // short-circuit and if possible. Note an edge case when all the phis
@@ -300,7 +299,7 @@ object NextNext {
     (1 to n).foldLeft(phi) { (f, _) => new NextNext(f) }
 }
 class NextNext[T](phi : NextFormula[T]) extends Next[T](phi) with NextFormula[T] {
-  override def getResult = None
+  override def result = None
   override def consume(atoms : T) = phi
 }
 
