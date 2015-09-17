@@ -4,6 +4,8 @@ import org.scalacheck.Gen
 import org.scalacheck.util.Buildable
 import Buildables.buildableSeq
 
+import scala.language.{postfixOps,higherKinds}
+
 object UtilsGen {
   /** Like containerOfN but with variable number of elements
    * */

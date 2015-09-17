@@ -2,6 +2,7 @@ package es.ucm.fdi.sscheck.spark.streaming
 
 import scala.concurrent._
 import scala.concurrent.duration._
+import scala.language.postfixOps
 import ExecutionContext.Implicits.global
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.scheduler.{StreamingListener, StreamingListenerReceiverStarted, StreamingListenerBatchCompleted}

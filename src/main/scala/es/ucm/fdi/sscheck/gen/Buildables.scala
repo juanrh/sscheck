@@ -1,6 +1,7 @@
 package es.ucm.fdi.sscheck.gen
 
 import org.scalacheck.util.Buildable
+import scala.language.{implicitConversions,higherKinds,postfixOps}
 
 object Buildables {
   /** Buildable for Seq, so we can use Gen.containerOf and Arbitrary.arbitrary
@@ -53,17 +54,20 @@ object Buildables {
     
   /** A Buildable for building an object Batch[T] from its elements of type T
    * */
-  // implicit def buildableBatch[T] : Buildable[T, Batch[T]] = {      
+  implicit def buildableBatch[T] : Buildable[T, Batch[T]] = {      
     /* alternative implementation based on the overload of mapBuildable, implies additional
      * calls to identity
    
      mapBuildable(identity[T], (xs : List[T]) => Batch(xs))(implicitly[Buildable[T, List[T]]])
      */
-  //   mapBuildable((xs : List[T]) => Batch(xs:_*))(implicitly[Buildable[T, List[T]]])
- //  }
+    mapBuildable((xs : List[T]) => Batch(xs:_*))(implicitly[Buildable[T, List[T]]])
+  }
     
   /** A Buildable for building an object DStream[T] from its batches of type Batch[T]
    * */
-  // implicit def buildableDStreamFromBatch[T] : Buildable[Batch[T], DStream[T]] = 
-  //   mapBuildable((batches : List[Batch[T]]) => DStream(batches:_*))(implicitly[Buildable[Batch[T], List[Batch[T]]]])      
+  implicit def buildableDStreamFromBatch[T] : Buildable[Batch[T], DStream[T]] = 
+    mapBuildable((batches : List[Batch[T]]) => DStream(batches:_*))(
+                 implicitly[Buildable[Batch[T], List[Batch[T]]]])
+  
+  
 }

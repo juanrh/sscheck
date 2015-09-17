@@ -6,6 +6,7 @@ import org.apache.spark._
 import org.apache.spark.rdd.RDD
 
 import scala.reflect.ClassTag
+import scala.language.implicitConversions
 
 import es.ucm.fdi.sscheck.spark.Parallelism
 

@@ -5,6 +5,7 @@ import org.apache.spark.streaming.scheduler.InputInfo
 import org.apache.spark.rdd.RDD
 
 import scala.reflect.ClassTag
+import scala.language.postfixOps
 import java.io.{NotSerializableException, ObjectOutputStream}
 
 import com.typesafe.scalalogging.slf4j.Logger

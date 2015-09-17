@@ -7,6 +7,7 @@ import org.scalacheck.Prop
 import scalaz.syntax.std.boolean._
 
 import scala.annotation.tailrec
+import scala.language.{postfixOps,implicitConversions}
 
 object Formula {
   /** More succinct notation for timeouts when combined with TimeoutMissingFormula.on()  
