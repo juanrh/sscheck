@@ -39,6 +39,11 @@ object BatchGen {
    * 
    * Although a Batch is a Seq, we need this simple definition of 
    * shrink as the default doesn't work properly
+   * 
+   * Note shrinking assumes no particular structure on the batches, but 
+   * that is no problem as there is no temporal structure in the 
+   * Batch generators: note generators like BatchGen.now() are in 
+   * fact generators of PDStream 
    * */
   implicit def shrinkBatch[A] : Shrink[Batch[A]] = Shrink( batch =>
     // unwrap the underlying Seq, shrink the Seq, and rewrap
@@ -61,7 +66,7 @@ object BatchGen {
 	
   /** @returns a generator of Batch that generates its elements from g
   * */
-  def ofNtoM[T](n : Int, m : Int, g : => Gen[T]) : Gen[Batch[T]] = {
+  def ofNtoM[T](n : Int, m : Int, g : Gen[T]) : Gen[Batch[T]] = {
 	import Buildables.buildableBatch
     UtilsGen.containerOfNtoM[Batch, T](n, m, g)  
   }
@@ -105,11 +110,6 @@ object BatchGen {
    * */
   def until[A](bg1 : Gen[Batch[A]], bg2 : Gen[Batch[A]]) : Gen[PDStream[A]] =
     PDStreamGen.until(now(bg1), now(bg2))
-    /* Alternative direct implementation
-    Gen.sized { size =>
-      // ok as DStreamGen.ofN works ok for n < 0
-      DStreamGen.ofNtoM(0, size -1, bg1) ++ now(bg2)
-    }*/
     
   def eventually[A](bg : Gen[Batch[A]]) : Gen[PDStream[A]] =
     // note true is represented here as Batch.empty, as true
@@ -118,9 +118,6 @@ object BatchGen {
     PDStreamGen.eventually(now(bg)) 
 
   def always[A](bg : Gen[Batch[A]]) : Gen[PDStream[A]] =
-   /* Gen.sized { size =>
-      DStreamGen.ofN(size, bg)  
-    } */
     PDStreamGen.always(now(bg))
     
   /** 
