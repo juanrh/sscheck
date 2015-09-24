@@ -24,8 +24,7 @@ import org.slf4j.LoggerFactory
 
 import scala.util.Properties.lineSeparator
 
-import org.apache.spark.streaming.dstream.DynSeqQueueInputDStream
-import org.apache.spark.streaming.dstream.DynSeqQueueInputDStreamOpt
+import org.apache.spark.streaming.dstream.{DynSingleSeqQueueInputDStream}
 import es.ucm.fdi.sscheck.spark.Parallelism
 import es.ucm.fdi.sscheck.{TestCaseIdCounter,PropResult,TestCaseId,TestCaseRecord}
   
@@ -62,7 +61,10 @@ object DStreamProp {
     
     type U = (RDD[E1], RDD[E2])
     type Form = Formula[U]
-    val inputDStream1 = new DynSeqQueueInputDStream[E1](ssc, numSlices = parallelism.numSlices)
+    // using DynSeqQueueInputDStream and addDStream leads to mixing the end of a test
+    // case with the start of the next one
+    //val inputDStream1 = new DynSeqQueueInputDStream[E1](ssc, numSlices = parallelism.numSlices)
+    val inputDStream1 = new DynSingleSeqQueueInputDStream[E1](ssc, numSlices = parallelism.numSlices)
     inputDStream1.foreachRDD { (rdd, time) => 
       println(s"""${msgHeader}
 Time: ${time} - InputDStream1 (${rdd.count} records)
@@ -82,7 +84,7 @@ ${rdd.take(numSampleRecords).mkString(lineSeparator)}
     // - Prop.forall reads currFormula, and foreachRDD reads resetFormula
     @volatile var currFormula : NextFormula[U] = null // effectively initialized to formulaNext, if the code is ok
       // for "the cheap read-write lock trick" https://www.ibm.com/developerworks/java/library/j-jtp06197/ 
-    val currFormulaLock = new Object 
+    val currFormulaLock = new Serializable{}
     @volatile var resetFormula = true
     inputDStream1
     .foreachRDD { (input1Batch, time) =>
@@ -136,8 +138,8 @@ ${rdd.take(numSampleRecords).mkString(lineSeparator)}
         // only defined after a wait for onBatchCompleted
       var propFailed = false 
       logger.warn(s"starting test case $testCaseId")
-        // add current test case to inputDStream
-      inputDStream1.addDStream(testCaseDstream)
+        // set current test case at inputDStream
+      inputDStream1.setDStream(testCaseDstream)
       
       for (i <- 1 to testCaseDstream.length if (! propFailed)) {
         // await for the end of the each batch 
@@ -184,7 +186,7 @@ ${rdd.take(numSampleRecords).mkString(lineSeparator)}
         case Prop.True => Prop.passed
         case Prop.Proof => Prop.proved
         case Prop.False => Prop.falsified
-        case Prop.Undecided => Prop.undecided
+        case Prop.Undecided => Prop.passed //Prop.undecided FIXME
         case Prop.Exception(e) => Prop.exception(e)
       }
     }     
