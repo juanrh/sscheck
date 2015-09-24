@@ -8,7 +8,7 @@ import org.scalatest.Matchers._
 import org.scalatest.prop.PropertyChecks._
 import org.scalatest.Inspectors.{forAll => testForAll}
 import Batch.seq2batch
-import BatchGen._
+import BatchGenConversions._
 import PDStreamGen._
 import Buildables.{buildableBatch, buildablePDStreamFromBatch}
 import DStreamMatchers._

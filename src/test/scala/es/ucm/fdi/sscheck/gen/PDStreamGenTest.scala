@@ -9,7 +9,7 @@ import org.scalatest._
 import org.scalatest.Matchers._
 import org.scalatest.prop.PropertyChecks._
 import org.scalatest.Inspectors.{forAll => testForAll}
-import PDStreamGen._
+import PDStreamGenConversions._
 
 /*
  * NOTE the use of the import alias org.scalatest.Inspectors.{forAll => testForAll} to
