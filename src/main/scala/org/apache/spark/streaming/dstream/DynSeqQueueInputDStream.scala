@@ -3,13 +3,12 @@ package org.apache.spark.streaming.dstream
 import org.apache.spark.streaming.{StreamingContext,Time}
 import org.apache.spark.streaming.scheduler.InputInfo
 import org.apache.spark.rdd.RDD
-
 import scala.reflect.ClassTag
 import scala.language.postfixOps
 import java.io.{NotSerializableException, ObjectOutputStream}
-
 import com.typesafe.scalalogging.slf4j.Logger
 import org.slf4j.LoggerFactory
+import scalaz.IsEmpty
 
 /** Parallelization is only performed on compute(), to avoid too many RDDs. This
  *  class is for local testing anyway, and we could easily modify this class to 
@@ -36,13 +35,13 @@ class DynSeqQueueInputDStream [A:ClassTag](
   private var dstreams : List[List[Seq[A]]] = Nil
   
   private[this] def reset() : Unit = { dstreams = Nil }
-    
-  private def writeObject(oos: ObjectOutputStream): Unit = {
-    throw new NotSerializableException(s"${this.getClass().getName()} doesn't support checkpointing")
-  }
-  
+      
   def addDStream(dstream : Seq[Seq[A]]) : Unit = synchronized {
     dstreams = dstream.toList :: dstreams
+  }
+  
+  def setDStream(dstream : Seq[Seq[A]]) : Unit = synchronized {
+    dstreams = dstream.toList :: Nil
   }
    
   override def start() : Unit = reset()
@@ -84,6 +83,66 @@ class DynSeqQueueInputDStream [A:ClassTag](
 }
 
 
+/** Version of DynSeqQueueInputDStream that only supports a single
+ *  test case at a time 
+ * */
+class DynSingleSeqQueueInputDStream [A:ClassTag](
+    @transient val _ssc : StreamingContext,
+    val numSlices : Int = 2,
+    val verbose : Boolean = false
+  ) extends InputDStream[A](_ssc) {
+  
+  @transient private val logger = Logger(LoggerFactory.getLogger("DynSingleSeqQueueInputDStream"))
+  
+  @transient val _sc = _ssc.sparkContext
+  
+  /** DStream that will be generated
+   * */
+  private var dstream : Option[List[Seq[A]]] = None
+  
+  private[this] def reset() : Unit = { dstream = None }
+      
+  def setDStream(newDstream : Seq[Seq[A]]) : Unit = synchronized {
+    dstream = Some(newDstream.toList)
+  }
+   
+  override def start() : Unit = reset()
+  override def stop() : Unit = reset()  
+  override def compute(validTime: Time): Option[RDD[A]] = synchronized {
+    val batch = dstream match {
+      case Some(batches) => {
+        if (batches.isEmpty) {
+          dstream = None
+          Nil
+        } else {
+          val newBatch = batches.head
+          dstream = Some(batches.tail)
+          newBatch
+        }
+      }
+      case None => Nil
+    }
+    
+    if (verbose) { logger.debug(s"dstream = $dstream") }
+     
+    if (batch.size > 0) {
+      logger.debug(s"computing batch ${batch.take(10).mkString(",")}")
+      
+      // copied from DirectKafkaInputDStream
+      // Report the record number of this batch interval to InputInfoTracker.
+      val numRecords = batch.length
+      val inputInfo = InputInfo(id, numRecords)
+      ssc.scheduler.inputInfoTracker.reportInfo(validTime, inputInfo)
+    
+      val rdd = _sc.parallelize(batch, numSlices=numSlices)
+      rdd.count // force compute or this does nothing
+      Some(rdd)
+    } else {
+      None 
+    }
+  } 
+}
+
 object DynSeqQueueInputDStreamOpt {
   /** @return a new instance of DynSeqQueueInputDStreamOpt where all
    *  the None batches have been replaced by empty batches, and all
@@ -124,11 +183,7 @@ class DynSeqQueueInputDStreamOpt[A:ClassTag](
   private var dstreams : List[List[Seq[A]]] = Nil
   
   private[this] def reset() : Unit = { dstreams = Nil }
-    
-  private def writeObject(oos: ObjectOutputStream): Unit = {
-    throw new NotSerializableException(s"${this.getClass().getName()} doesn't support checkpointing")
-  }
-  
+      
   def addDStream(dstream : Seq[Seq[A]]) : Unit = synchronized {
     dstreams = dstream.toList :: dstreams
   }

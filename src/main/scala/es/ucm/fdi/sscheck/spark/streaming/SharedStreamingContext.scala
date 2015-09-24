@@ -5,6 +5,8 @@ import org.apache.spark.streaming.{StreamingContext,Duration}
 import com.typesafe.scalalogging.slf4j.Logger
 import org.slf4j.LoggerFactory
 
+import com.holdenkarau.spark.testing.Utils 
+
 import scala.util.Try 
 
 import es.ucm.fdi.sscheck.spark.SharedSparkContext
@@ -20,16 +22,33 @@ trait SharedStreamingContext
   * */
   def batchDuration : Duration 
   
+  // disabled by default because it is quite costly
+  def enableCheckpointing : Boolean = false 
+  
   @transient protected[this] var _ssc : Option[StreamingContext] = None
   def ssc() : StreamingContext = {
     _ssc.getOrElse { 
       // first force the creation of a SparkContext, if needed
-      val __sc = sc() 
-      logger.warn("creating test Spark Streaming context")
+      val __sc = sc()
+      logger.warn(s"creating test Spark Streaming context")
       _ssc = Some(new StreamingContext(__sc, batchDuration))
+      if (enableCheckpointing) {
+        val checkpointDir = Utils.createTempDir().toString
+        logger.warn(s"configuring Spark Streaming checkpoint directory ${checkpointDir}")
+        _ssc.get.checkpoint(checkpointDir)
+      }
       _ssc.get
     }
   }
+  
+  /*
+   * // Directory where the checkpoint data will be saved
+  lazy val checkpointDir = {
+    val dir = Utils.createTempDir()
+    logDebug(s"checkpointDir: $dir")
+    dir.toString
+  }
+   */
   
   /** Close the shared StreamingContext. NOTE the inherited SparkContext 
    *  is NOT closed, as often we would like to have different life cycles 

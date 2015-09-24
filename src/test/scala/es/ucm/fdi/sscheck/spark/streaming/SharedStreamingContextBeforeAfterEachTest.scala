@@ -31,6 +31,7 @@ class SharedStreamingContextBeforeAfterEachTest
   override def sparkMaster : String = "local[5]"
   override def batchDuration = Duration(250) 
   override def defaultParallelism = 3
+  override def enableCheckpointing = false // as queueStream doesn't support checkpointing 
   
   def is = 
     sequential ^ s2"""
