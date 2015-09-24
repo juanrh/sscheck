@@ -193,7 +193,7 @@ object NextOr {
 class NextOr[T](phis : NextFormula[T]*) extends Or(phis:_*) with NextFormula[T] {
   override def result = None
   override def consume(atoms : T) = {
-    val (phisDefined, phisUndefined) = phis.view
+    val (phisDefined, phisUndefined) = phis.par //view
       .map { _.consume(atoms) }
       .partition { _.result.isDefined }            
     val definedStatus = (! phisDefined.isEmpty) option {
@@ -213,8 +213,8 @@ class NextOr[T](phis : NextFormula[T]*) extends Or(phis:_*) with NextFormula[T] 
       // if definedStatus is undecided keep it in case 
       // the rest of the or is reduced to false later on
       val newPhis = definedStatus match {
-        case Some(Prop.Undecided) => Solved[T](Prop.Undecided) +: phisUndefined.force
-        case _ => phisUndefined.force
+        case Some(Prop.Undecided) => Solved[T](Prop.Undecided) +: phisUndefined.seq //.force
+        case _ => phisUndefined.seq//.force
       } 
       NextOr(newPhis :_*)
     }
@@ -248,7 +248,7 @@ object NextAnd {
 class NextAnd[T](phis : NextFormula[T]*) extends And(phis:_*) with NextFormula[T] {
   override def result = None
   override def consume(atoms : T) = {
-    val (phisDefined, phisUndefined) = phis.view
+    val (phisDefined, phisUndefined) = phis.par //.view
       .map { _.consume(atoms) }
       .partition { _.result.isDefined }     
     val definedStatus = (! phisDefined.isEmpty) option {
@@ -268,8 +268,8 @@ class NextAnd[T](phis : NextFormula[T]*) extends And(phis:_*) with NextFormula[T
       // if definedStatus is undecided keep it in case 
       // the rest of the and is reduced to true later on
       val newPhis = definedStatus match {
-        case Some(Prop.Undecided) => Solved[T](Prop.Undecided) +: phisUndefined.force
-        case _ => phisUndefined.force
+        case Some(Prop.Undecided) => Solved[T](Prop.Undecided) +: phisUndefined.seq //.force
+        case _ => phisUndefined.seq ///.force
       }
       NextAnd(newPhis :_*)
     }
