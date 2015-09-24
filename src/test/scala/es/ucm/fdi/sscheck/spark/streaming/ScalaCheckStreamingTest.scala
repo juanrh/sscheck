@@ -75,7 +75,7 @@ class ScalaCheckStreamingTest
          val (inputBatch, transBatch) = u
          transBatch.count === 1 and
          inputBatch.count === transBatch.first
-      }) during  numBatches
+      }) during numBatches
     )}.set(minTestsOk = 10).verbose
     
 }
