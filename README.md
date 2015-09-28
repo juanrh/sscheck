@@ -3,40 +3,34 @@ Utilities for using ScalaCheck with Spark and Spark Streaming, based on Specs2
 
 [![Build Status](https://travis-ci.org/juanrh/sscheck.svg?branch=master)](https://travis-ci.org/juanrh/sscheck)
 
-# Quickstart
-## Using ScalaCheck with Spark core
-[Example property](https://github.com/juanrh/sscheck/blob/d1c1799129475fa18e3231f817cad15badeccf8c/src/test/scala/es/ucm/fdi/sscheck/spark/SharedSparkContextBeforeAfterAllTest.scala):
+Use linear temporal logic to write ScalaCheck properties for Spark Streaming programs, like this one:
 ```scala
-def forallRDDGenOfNFreqMean = {
-  val freqs = Map(1 -> 0, 4 -> 1)
-  val rddSize = 300
-  val gRDDFreq = RDDGen.ofN(rddSize, Gen.frequency(freqs.mapValues(Gen.const(_)).toSeq:_*))
-  val expectedMean = {
-  val freqS = freqs.toSeq
-    val num = freqS .map({case (f, v) => v * f}). sum
-    val den = freqS .map(_._1). sum
-    num / den.toDouble
-  }  
-  Prop.forAll("rdd" |: gRDDFreq){ rdd : RDD[Int] =>
-    rdd.mean must be ~(expectedMean +/- 0.1) 
+def checkExtractBannedUsersList(testSubject : DStream[(UserId, Boolean)] => DStream[UserId]) = {
+    val batchSize = 20 
+    val (headTimeout, tailTimeout, nestedTimeout) = (10, 10, 5) 
+    val (badId, ids) = (15L, Gen.choose(1L, 50L))   
+    val goodBatch = BatchGen.ofN(batchSize, ids.map((_, true)))
+    val badBatch = goodBatch + BatchGen.ofN(1, (badId, false))
+    val gen = BatchGen.until(goodBatch, badBatch, headTimeout) ++ 
+               BatchGen.always(Gen.oneOf(goodBatch, badBatch), tailTimeout)
+    
+    type U = (RDD[(UserId, Boolean)], RDD[UserId])
+    val (inBatch, outBatch) = ((_ : U)._1, (_ : U)._2)
+    
+    val formula : Formula[U] = {
+      val badInput : Formula[U] = at(inBatch)(_ should existsRecord(_ == (badId, false)))
+      val allGoodInputs : Formula[U] = at(inBatch)(_ should foreachRecord(_._2 == true))
+      val badIdBanned : Formula[U] = at(outBatch)(_ should existsRecord(_ == badId))
+      
+      ( allGoodInputs until badIdBanned on headTimeout ) and
+      ( always { badInput ==> (always(badIdBanned) during nestedTimeout) } during tailTimeout )  
+    }  
+    
+    DStreamProp.forAll(gen)(testSubject)(formula)
   }
-}. set(minTestsOk = 50).verbose 
 ```
-More details in this [blog post](http://data42.blogspot.com.es/2015/07/property-based-testing-with-spark.html) 
 
-## Using ScalaCheck with Spark Streaming
-[Example property](https://github.com/juanrh/sscheck/blob/4d1a0c09c569d6c8281ba07c98a54abd972c9546/src/test/scala/es/ucm/fdi/sscheck/spark/streaming/ScalaCheckStreamingTest.scala):
-```scala
-def countProp(testSubject : DStream[Double] => DStream[Long]) = 
-  DStreamProp.forAllAlways(
-    Gen.listOfN(10,  Gen.listOfN(30, arbitrary[Double])))(
-    testSubject)( 
-    (inputBatch : RDD[Double], transBatch : RDD[Long]) => {
-      transBatch.count === 1 and
-      inputBatch.count === transBatch.first
-    }).set(minTestsOk = 10).verbose     
-```
-More details in this [blog post](http://data42.blogspot.com.es/2015/08/property-based-testing-with-spark.html)
+See the [**Quickstart**](https://github.com/juanrh/sscheck/wiki/Quickstart) for more details on the temporal logic, and for using this library with Spark core. 
 
 # Acknowledgements
 This work has been partially supported by the project [N-Greens Software-CM](http://n-greens-cm.org/) (S2013/ICE-2731), financed by the regional goverment of Madrid, Spain. 
