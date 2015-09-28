@@ -33,6 +33,7 @@ def checkExtractBannedUsersList(testSubject : DStream[(UserId, Boolean)] => DStr
 See the [**Quickstart**](https://github.com/juanrh/sscheck/wiki/Quickstart) for more details on the temporal logic, and for using this library with Spark core. 
 
 # Acknowledgements
-This work has been partially supported by the project [N-Greens Software-CM](http://n-greens-cm.org/) (S2013/ICE-2731), financed by the regional goverment of Madrid, Spain. 
+This work has been partially supported by MICINN Spanish project StrongSoft (TIN2012-39391-C04-04), by the
+Spanish MINECO project CAVI-ART (TIN2013-44742-C4-3-R), and by the Comunidad de Madrid project [N-Greens Software-CM](http://n-greens-cm.org/) (S2013/ICE-2731).
 
 Some parts of this code are based on [Spark Testing Base](https://github.com/holdenk/spark-testing-base) by Holden Karau
