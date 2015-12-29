@@ -2,11 +2,17 @@ import com.typesafe.sbteclipse.plugin.EclipsePlugin.EclipseKeys._
 
 name := "sscheck"
 
-version := "1.0"
+version := "0.2.0"
 
 scalaVersion := "2.10.5"
 
 crossScalaVersions  := Seq("2.10.5")
+
+licenses += ("Apache-2.0", url("http://www.apache.org/licenses/LICENSE-2.0"))
+
+bintrayPackageLabels := Seq("testing")
+
+bintrayVcsUrl := Some("git@github.com:juanrh/sscheck.git")   
 
 lazy val sparkVersion = "1.4.1"
 
