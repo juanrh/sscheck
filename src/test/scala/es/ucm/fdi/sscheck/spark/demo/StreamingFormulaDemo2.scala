@@ -68,11 +68,12 @@ class StreamingFormulaDemo2
     val (inBatch, outBatch) = ((_ : U)._1, (_ : U)._2)
     
     val formula : Formula[U] = {
-      val badInput : Formula[U] = at(inBatch)(_ should existsRecord(_ == (badId, false)))
-      val allGoodInputs : Formula[U] = at(inBatch)(_ should foreachRecord(_._2 == true))
-      val badIdBanned : Formula[U] = at(outBatch)(_ should existsRecord(_ == badId))
+      val badInput = at(inBatch)(_ should existsRecord(_ == (badId, false)))
+      val allGoodInputs = at(inBatch)(_ should foreachRecord(_._2 == true))
+      val noIdBanned = at(outBatch)(_.isEmpty)
+      val badIdBanned = at(outBatch)(_ should existsRecord(_ == badId))
       
-      ( allGoodInputs until badIdBanned on headTimeout ) and
+      ( ( allGoodInputs and noIdBanned ) until badIdBanned on headTimeout ) and
       ( always { badInput ==> (always(badIdBanned) during nestedTimeout) } during tailTimeout )  
     }  
     
