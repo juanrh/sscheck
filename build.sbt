@@ -2,6 +2,8 @@ import com.typesafe.sbteclipse.plugin.EclipsePlugin.EclipseKeys._
 
 name := "sscheck"
 
+organization := "es.ucm.fdi"
+
 version := "0.2.0"
 
 scalaVersion := "2.10.5"
