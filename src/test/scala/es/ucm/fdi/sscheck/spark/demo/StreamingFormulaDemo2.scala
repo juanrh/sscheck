@@ -31,7 +31,7 @@ class StreamingFormulaDemo2
   with ScalaCheck {
   
   // Spark configuration
-  override def sparkMaster : String = "local[7]"
+  override def sparkMaster : String = "local[*]"
   override def batchDuration = Duration(500) 
   override def defaultParallelism = 3
   override def enableCheckpointing = true

@@ -24,7 +24,7 @@ class StreamingFormulaDemo1
   with ScalaCheck {
   
   // Spark configuration
-  override def sparkMaster : String = "local[5]"
+  override def sparkMaster : String = "local[*]"
   override def batchDuration = Duration(350)
   override def defaultParallelism = 4  
 
@@ -42,7 +42,7 @@ class StreamingFormulaDemo1
   def countForallAlwaysProp(testSubject : DStream[Double] => DStream[Long]) = {
     type U = (RDD[Double], RDD[Long])
     val (inBatch, transBatch) = ((_ : U)._1, (_ : U)._2)
-    val numBatches = 10 // FIXME 20
+    val numBatches = 10
     val formula : Formula[U] = always { (u : U) =>
       transBatch(u).count === 1 and
       inBatch(u).count === transBatch(u).first 
@@ -53,6 +53,6 @@ class StreamingFormulaDemo1
       gen)(
       testSubject)(
       formula)
-  }.set(minTestsOk = 5).verbose // FIXME 20?  
+  }.set(minTestsOk = 10).verbose  
   
 }

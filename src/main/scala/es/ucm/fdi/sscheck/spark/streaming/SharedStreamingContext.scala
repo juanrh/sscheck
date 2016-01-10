@@ -41,15 +41,6 @@ trait SharedStreamingContext
     }
   }
   
-  /*
-   * // Directory where the checkpoint data will be saved
-  lazy val checkpointDir = {
-    val dir = Utils.createTempDir()
-    logDebug(s"checkpointDir: $dir")
-    dir.toString
-  }
-   */
-  
   /** Close the shared StreamingContext. NOTE the inherited SparkContext 
    *  is NOT closed, as often we would like to have different life cycles 
    *  for these two kinds of contexts: SparkContext is heavyweight and
