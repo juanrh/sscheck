@@ -60,21 +60,21 @@ object BatchGen {
     shrink(batch.toSeq).map(Batch(_:_*))
   )
   
-  /** @returns a generator of Batch that generates its elements from g
+  /** @return a generator of Batch that generates its elements from g
    * */
   def of[T](g : => Gen[T]) : Gen[Batch[T]] = {
 	import Buildables.buildableBatch
 	Gen.containerOf[Batch, T](g)  
   }
 	
-  /** @returns a generator of Batch that generates its elements from g
+  /** @return a generator of Batch that generates its elements from g
   * */
   def ofN[T](n : Int, g : Gen[T]) : Gen[Batch[T]] = {
     import Buildables.buildableBatch
     Gen.containerOfN[Batch, T](n, g)  
   }
 	
-  /** @returns a generator of Batch that generates its elements from g
+  /** @return a generator of Batch that generates its elements from g
   * */
   def ofNtoM[T](n : Int, m : Int, g : Gen[T]) : Gen[Batch[T]] = {
 	import Buildables.buildableBatch

@@ -30,7 +30,7 @@ object RDDGen {
   implicit def seq2RDD[A](seq : Seq[A])(implicit aCt: ClassTag[A], sc : SparkContext, parallelism : Parallelism) : RDD[A] = 
     sc.parallelize(seq, numSlices=parallelism.numSlices)
     
-  /** @returns a generator of RDD that generates its elements from g
+  /** @return a generator of RDD that generates its elements from g
    * */
   def of[A](g : => Gen[A])
            (implicit aCt: ClassTag[A], sc : SparkContext, parallelism : Parallelism) 
@@ -39,7 +39,7 @@ object RDDGen {
     // Buildable, because that implies defining a wrapper to convert RDD into Traversable
     seqGen2RDDGen(Gen.listOf(g))
     
-  /** @returns a generator of RDD that generates its elements from g
+  /** @return a generator of RDD that generates its elements from g
   * */
   def ofN[A](n : Int, g : Gen[A])
   			(implicit aCt: ClassTag[A], sc : SparkContext, parallelism : Parallelism)
@@ -47,7 +47,7 @@ object RDDGen {
     seqGen2RDDGen(Gen.listOfN(n, g))
   }
   
-   /** @returns a generator of RDD that generates its elements from g
+   /** @return a generator of RDD that generates its elements from g
   * */
   def ofNtoM[A](n : Int, m : Int, g : => Gen[A]) 
   			   (implicit aCt: ClassTag[A], sc : SparkContext, parallelism : Parallelism)

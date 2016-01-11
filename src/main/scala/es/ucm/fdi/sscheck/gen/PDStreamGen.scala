@@ -60,19 +60,19 @@ object PDStreamGen {
 //    shrink(pdstream.toSeq).map(PDStream(_:_*))
 //  )
   
-  /** @returns a generator of DStream that generates its batches from bg
+  /** @return a generator of DStream that generates its batches from bg
    * */
   def of[T](bg : => Gen[Batch[T]]) : Gen[PDStream[T]] = {
     import Buildables.buildablePDStreamFromBatch
     Gen.buildableOf[PDStream[T], Batch[T]](bg)
   }
-  /** @returns a generator of DStream that generates its batches from bg
+  /** @return a generator of DStream that generates its batches from bg
    * */
   def ofN[T](n : Int, bg : Gen[Batch[T]]) : Gen[PDStream[T]] = {
     import Buildables.buildablePDStreamFromBatch
     Gen.buildableOfN[PDStream[T], Batch[T]](n, bg)
   }
-  /** @returns a generator of DStream that generates its batches from bg
+  /** @return a generator of DStream that generates its batches from bg
    * */
   def ofNtoM[T](n : Int, m : Int, bg : Gen[Batch[T]]) : Gen[PDStream[T]] = {
     import Buildables.buildablePDStreamFromBatch
