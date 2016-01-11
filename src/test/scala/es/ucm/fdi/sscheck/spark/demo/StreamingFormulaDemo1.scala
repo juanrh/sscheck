@@ -12,14 +12,14 @@ import org.apache.spark.streaming.Duration
 import org.apache.spark.streaming.dstream.DStream
 
 import es.ucm.fdi.sscheck.spark.streaming.SharedStreamingContextBeforeAfterEach
-import es.ucm.fdi.sscheck.prop.tl.{Formula,DStreamProp}
+import es.ucm.fdi.sscheck.prop.tl.{Formula,DStreamTLProperty}
 import es.ucm.fdi.sscheck.prop.tl.Formula._
 import es.ucm.fdi.sscheck.gen.{PDStreamGen,BatchGen}
 
 @RunWith(classOf[JUnitRunner])
 class StreamingFormulaDemo1 
   extends Specification 
-  with SharedStreamingContextBeforeAfterEach 
+  with DStreamTLProperty
   with ResultMatchers
   with ScalaCheck {
   
@@ -49,7 +49,7 @@ class StreamingFormulaDemo1
     } during numBatches
     val gen = BatchGen.always(BatchGen.ofN(50, arbitrary[Double]), numBatches)
     
-    DStreamProp.forAll(
+    forAllDStream(
       gen)(
       testSubject)(
       formula)

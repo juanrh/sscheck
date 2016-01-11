@@ -13,14 +13,14 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.{Duration}
 import org.apache.spark.streaming.dstream.DStream
 
-import es.ucm.fdi.sscheck.prop.tl.DStreamProp
 import es.ucm.fdi.sscheck.prop.tl.Formula._
+import es.ucm.fdi.sscheck.prop.tl.DStreamTLProperty
 import es.ucm.fdi.sscheck.matcher.specs2.RDDMatchers._
 
 @RunWith(classOf[JUnitRunner])
 class ScalaCheckStreamingTest 
   extends org.specs2.Specification  
-  with SharedStreamingContextBeforeAfterEach
+  with DStreamTLProperty
   with org.specs2.matcher.ResultMatchers
   with ScalaCheck {
     
@@ -46,7 +46,7 @@ class ScalaCheckStreamingTest
     } 
     type U = (RDD[Int], RDD[Int])
     
-    DStreamProp.forAll(
+    forAllDStream(
       "inputDStream" |: dsgenSeqSeq1)(
       (inputDs : DStream[Int]) => {  
         val transformedDs = inputDs.map(_+1)
@@ -68,7 +68,7 @@ class ScalaCheckStreamingTest
   def countProp(testSubject : DStream[Double] => DStream[Long]) = {
     type U = (RDD[Double], RDD[Long])
     val numBatches = 10 
-    DStreamProp.forAll( 
+    forAllDStream( 
       Gen.listOfN(numBatches,  Gen.listOfN(30, arbitrary[Double])))(
       testSubject
       )(always ((u : U) => {

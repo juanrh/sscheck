@@ -16,7 +16,7 @@ import org.apache.spark.streaming.dstream.DStream._
 import scalaz.syntax.std.boolean._
     
 import es.ucm.fdi.sscheck.spark.streaming.SharedStreamingContextBeforeAfterEach
-import es.ucm.fdi.sscheck.prop.tl.{Formula,DStreamProp}
+import es.ucm.fdi.sscheck.prop.tl.{Formula,DStreamTLProperty}
 import es.ucm.fdi.sscheck.prop.tl.Formula._
 import es.ucm.fdi.sscheck.gen.{PDStreamGen,BatchGen}
 import es.ucm.fdi.sscheck.gen.BatchGenConversions._
@@ -26,7 +26,7 @@ import es.ucm.fdi.sscheck.matcher.specs2.RDDMatchers._
 @RunWith(classOf[JUnitRunner])
 class StreamingFormulaDemo2 
   extends Specification 
-  with SharedStreamingContextBeforeAfterEach 
+  with DStreamTLProperty
   with ResultMatchers
   with ScalaCheck {
   
@@ -77,7 +77,7 @@ class StreamingFormulaDemo2
       ( always { badInput ==> (always(badIdBanned) during nestedTimeout) } during tailTimeout )  
     }  
     
-    DStreamProp.forAll(
+    forAllDStream(    
       gen)(
       testSubject)( 
       formula)
