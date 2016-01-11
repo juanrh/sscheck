@@ -4,7 +4,7 @@ name := "sscheck"
 
 organization := "es.ucm.fdi"
 
-version := "0.2.0"
+version := "0.2.1-SNAPSHOT"
 
 scalaVersion := "2.10.5"
 
@@ -57,7 +57,7 @@ libraryDependencies += "org.specs2" %% "specs2-junit" % specs2Version
 
 libraryDependencies += "io.github.nicolasstucki" %% "multisets" % "0.1"
 
-libraryDependencies += "holdenk" % "spark-testing-base" % "1.3.0_0.0.5"
+libraryDependencies += "holdenk" % "spark-testing-base" % "1.3.0_0.2.0"
 
 // note this is discontinued for scala 2.11, which uses https://github.com/typesafehub/scala-logging#contribution-policy
 libraryDependencies += "com.typesafe" % "scalalogging-log4j_2.10" % "1.1.0"
