@@ -1,4 +1,4 @@
-# sscheck 0.2.1-SNAPSHOT 
+# sscheck 0.2.1
 Bug fix implementation of temporal properties. Uses of `DStreamProp.forAll` combining with extending the trait `SharedStreamingContextBeforeAfterEach` should be replaced by extending the trait `DStreamTLProperty` and calling `forAllDStream`. This solves: 
 
  * Execution of a test case is now independent from others, as a new streaming context is created for each test case. This is particularly important for stateful DStream transformations
