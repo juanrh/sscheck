@@ -47,7 +47,7 @@ class StreamingFormulaDemo1
       transBatch(u).count === 1 and
       inBatch(u).count === transBatch(u).first 
     } during numBatches
-    val gen = BatchGen.always(BatchGen.ofN(50, arbitrary[Double]), numBatches)
+    val gen = BatchGen.always(BatchGen.ofNtoM(10, 50, arbitrary[Double]), numBatches)
     
     forAllDStream(
       gen)(
