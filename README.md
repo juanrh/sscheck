@@ -1,7 +1,7 @@
 # sscheck
 Utilities for using ScalaCheck with Spark and Spark Streaming, based on Specs2
 
-[Jenkins](http://juanrhcubox.duckdns.org:8080/)
+[Jenkins](https://juanrhcubox.duckdns.org:8080/)
 
 Use linear temporal logic to write ScalaCheck properties for Spark Streaming programs, see the [**Quickstart**](https://github.com/juanrh/sscheck/wiki/Quickstart) for details. 
 
