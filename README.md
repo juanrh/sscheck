@@ -9,4 +9,4 @@ Use linear temporal logic to write ScalaCheck properties for Spark Streaming pro
 This work has been partially supported by MICINN Spanish project StrongSoft (TIN2012-39391-C04-04), by the
 Spanish MINECO project CAVI-ART (TIN2013-44742-C4-3-R), and by the Comunidad de Madrid project [N-Greens Software-CM](http://n-greens-cm.org/) (S2013/ICE-2731).
 
-Some parts of this code are based on [Spark Testing Base](https://github.com/holdenk/spark-testing-base) by Holden Karau
+Some parts of this code are based on or have been taken from [Spark Testing Base](https://github.com/holdenk/spark-testing-base) by Holden Karau
