@@ -13,10 +13,10 @@ import es.ucm.fdi.sscheck.spark.Parallelism
 /** Generators for RDDs and implicit conversions from Seq and Seq generators to RDD and RDD 
  *  generators. All the functions are based on parallelizing generated sequences
  *  
- *  Instead of defining a class holding a spark context and a [[es.ucm.fdi.sscheck.testing.Parallelism]]
+ *  Instead of defining a class holding a spark context and a [[es.ucm.fdi.sscheck.spark.Parallelism]]
  *  object specifying the number of partitions to use on parallelization, these have to be explicitly
  *  provided when calling the methods, although these arguments have been made implicit to simulate
- *  state if wanted, like it is done in [[es.ucm.fdi.sscheck.testing.SharedSparkContextBeforeAfterAll]]  
+ *  state if wanted, like it is done in [[es.ucm.fdi.sscheck.spark.SharedSparkContextBeforeAfterAll]]  
  * */
 object RDDGen { 
   /** Convert a ScalaCheck generator of Seq into a generator of RDD   

@@ -1,6 +1,5 @@
 package es.ucm.fdi.sscheck.gen
 
-import scala.collection.immutable.{HashBag=>Bag}
 import org.scalatest.matchers.{Matcher, MatchResult}
 import scala.language.implicitConversions
 
@@ -16,7 +15,6 @@ object PDStream {
  * */
 case class PDStream[A](batches : Batch[A]*) extends Seq[Batch[A]] {    
   override def toSeq : Seq[Batch[A]] = batches
-  def toBagSeq : Seq[Bag[A]] = batches.map(_.toBag)
   
   override def apply(idx : Int) = batches.apply(idx)
   override def iterator = batches.iterator

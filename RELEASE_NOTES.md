@@ -1,3 +1,12 @@
+# sscheck 0.2.3
+Bug fixing and code cleanup
+ * Remove dependency to spark-testing-base and multisets in order to fix [#36](https://github.com/juanrh/sscheck/issues/36)
+ * Remove unused code from preliminary approaches that were later discarded
+ * Update Spark to version 1.6.0
+
+# sscheck 0.2.2
+Update Spark to version 1.6.0
+
 # sscheck 0.2.1
 Bug fix implementation of temporal properties. Uses of `DStreamProp.forAll` combining with extending the trait `SharedStreamingContextBeforeAfterEach` should be replaced by extending the trait `DStreamTLProperty` and calling `forAllDStream`. This solves: 
 

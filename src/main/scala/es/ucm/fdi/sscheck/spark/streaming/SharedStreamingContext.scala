@@ -5,8 +5,6 @@ import org.apache.spark.streaming.{StreamingContext,Duration}
 import com.typesafe.scalalogging.slf4j.Logger
 import org.slf4j.LoggerFactory
 
-import com.holdenkarau.spark.testing.Utils 
-
 import scala.util.Try 
 
 import es.ucm.fdi.sscheck.spark.SharedSparkContext
