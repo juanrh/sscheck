@@ -1,7 +1,7 @@
 package org.apache.spark.streaming.dstream
 
 import org.apache.spark.streaming.{StreamingContext,Time}
-import org.apache.spark.streaming.scheduler.InputInfo
+//import org.apache.spark.streaming.scheduler.InputInfo
 import org.apache.spark.rdd.RDD
 import scala.reflect.ClassTag
 import scala.language.postfixOps
@@ -69,9 +69,9 @@ class DynSeqQueueInputDStream [A:ClassTag](
       
       // copied from DirectKafkaInputDStream
       // Report the record number of this batch interval to InputInfoTracker.
-      val numRecords = batch.length
-      val inputInfo = InputInfo(id, numRecords)
-      ssc.scheduler.inputInfoTracker.reportInfo(validTime, inputInfo)
+      // val numRecords = batch.length
+      // val inputInfo = InputInfo(id, numRecords)
+      // ssc.scheduler.inputInfoTracker.reportInfo(validTime, inputInfo)
     
       val rdd = _sc.parallelize(batch, numSlices=numSlices)
       rdd.count // force compute or this does nothing
@@ -130,9 +130,9 @@ class DynSingleSeqQueueInputDStream [A:ClassTag](
       
       // copied from DirectKafkaInputDStream
       // Report the record number of this batch interval to InputInfoTracker.
-      val numRecords = batch.length
-      val inputInfo = InputInfo(id, numRecords)
-      ssc.scheduler.inputInfoTracker.reportInfo(validTime, inputInfo)
+      //val numRecords = batch.length
+      //val inputInfo = InputInfo(id, numRecords)
+      //ssc.scheduler.inputInfoTracker.reportInfo(validTime, inputInfo)
     
       val rdd = _sc.parallelize(batch, numSlices=numSlices)
       rdd.count // force compute or this does nothing
@@ -213,9 +213,9 @@ class DynSeqQueueInputDStreamOpt[A:ClassTag](
       
       // copied from DirectKafkaInputDStream
       // Report the record number of this batch interval to InputInfoTracker.
-      val numRecords = batch.length
-      val inputInfo = InputInfo(id, numRecords)
-      ssc.scheduler.inputInfoTracker.reportInfo(validTime, inputInfo)
+      // val numRecords = batch.length
+      // val inputInfo = InputInfo(id, numRecords)
+      // ssc.scheduler.inputInfoTracker.reportInfo(validTime, inputInfo)
     
       val rdd = _sc.parallelize(batch, numSlices=numSlices)
       rdd.count // force compute or this does nothing

@@ -8,7 +8,6 @@ import scalaz.syntax.std.boolean._
 
 import scala.annotation.tailrec
 import scala.language.{postfixOps,implicitConversions}
-
 object Formula {
   /** More succinct notation for timeouts when combined with TimeoutMissingFormula.on()  
    */
@@ -21,6 +20,18 @@ object Formula {
    */
   implicit def resultFunToNow[T, R <% Result](p : T => R) : Now[T] = Now(p)
   implicit def propStatusFunToNow[T](p : T => Prop.Status) : Now[T] = Now(p)
+  
+  implicit def formulaToResult[T](phi : Formula[T]) : Result = 
+    ??? // podria intentar hacerse con la next form y luego conviertiendo
+        // el Prop.Status a Result, pero 1) pensar q hace  operacionalmente
+        // 2) tiene q haber una mejor manera, esto es un tanto chapuzas: Now
+        // deberia poder aceptar tb funciones a Prop, eso parece mejor idea, podria
+        // modelarse con un trait con dos hijos para Prop y Res y con implicits. NO!!!
+        // Now lo q tiene q aceptar tb es funciones a formula, y cuando tiene una formuila
+        // dentro entonces consume devuelve la formula: esa case class para la union la 
+        // tiene dentro Now, y dos apply en el companion toman o bien funciones a result
+        // o bien a Formula, y no hace falta implicit ni nada
+        // Asi eso seria formultaToStatus
   
   /** Builds a Now formula of type T by composing the projection proj on 
    *  T with an the assertion function p
@@ -40,7 +51,74 @@ object Formula {
    * */
   def later[T](phi : Formula[T]) = eventually(phi)
   def always[T](phi : Formula[T]) = new TimeoutMissingFormula[T](Always(phi, _))  
+//  def always[T, R <% Result](a : T => R)(implicit arg0: ClassTag[T]) : TimeoutMissingFormula[T] = {
+//    val phi : Formula[T] = Now(a)
+//    always(phi)
+//  } // NOTE this is the same as using the implicit resultFunToNow
+    //def always[T, R <% Result](a : PartialFunction[T,  R])(implicit arg0: ClassTag[T]) : TimeoutMissingFormula[T] = {
+  // NOTE this is the same as using the implicit resultFunToNow, but it allows to fix the 
+  // universe by fixing the type variable
+  def always[T](a : T => Result): TimeoutMissingFormula[T] = always(Now(a))
+  //def always[T](toPhi : T => Formula[T]) : TimeoutMissingFormula[T] =    
+    //always(Now(af)) // esto no funciona pq Now no acepta una formula en el resultado: si lo hiciera 
+    // entonces seria primer orden!!!
+  def always[T, R <% Result](a : T => R): TimeoutMissingFormula[T] = always(Now(a)) 
+  // this is only partially satisfacting
+  // http://stackoverflow.com/questions/6247817/is-it-possible-to-curry-higher-kinded-types-in-scala
+  def alwaysAt[T](a : T => Result): TimeoutMissingFormula[T] = always(Now(a))
+  def alwaysAt[T, R <% Result](a : T => R): TimeoutMissingFormula[T] = always(Now(a))
+  import scala.reflect._
+  //trait Baz[T] extends PartialFunction[T, _ <% Result]
+  def alwaysAt2[T,R](a : T => R)(implicit toResult: R => Result): TimeoutMissingFormula[T] = always(Now(a))
+  //trait Baz[A] extends Turkle[Qux[A,?]]
+  type Fr[T] = PartialFunction[T, R] forSome {type R}
+  //def all[T](a : Fr[T])(implicit toResult: R => Result): TimeoutMissingFormula[T] = always(Now(a))
+  //def all[T](a : PartialFunction[T, R] forSome {type R})(implicit toResult: R => Result): TimeoutMissingFormula[T] = always(Now(a))
+  
+  // def allW2[T](a : T => R forSome {type R })(implicit toResult: R => Result): Unit = () // R out of scope in second arg
+  //def allW2[T](a : T => R forSome {type R <% Result}) : Unit = () // <% illegal bound for  existential types
+  //def allw2[T](a: T => R forSome {type R}) : TimeoutMissingFormula[T] =
+  //  always(Now( (t : T) => implicitly[Function[R,Result]].apply( a(t)))) // R out of scope
+  def allw[T](a : T => R forSome {type R <: ConvertibleToResult}) 
+             : TimeoutMissingFormula[T] = 
+    always(Now( (t : T) => a(t).toResult)) 
+    
+  def allw2[T](a: T => Result): TimeoutMissingFormula[T] =
+    always(Now(a(_)))
+    // always(Now( (t: T) => a(t))) 
+    
+  //def all[T](a : T => Result forSome {type R}
+  //def all[T](a : T => R forSome {type R <% Result}) : TimeoutMissingFormula[T] = always(Now(a)) 
+    
+  type ConvR[R] = R => Result
+  //def allw3[T](a : T => R forSome {type R : ConvR}) : TimeoutMissingFormula[T] = ??? 
+  
 }
+
+object ConvertibleToResult {
+  // def toConvertibleToResult[R <% Result](r : R) : Result = implicitly[Function[R,Result]].apply(r)
+  //implicit def toConvertibleToResult[R <% Result](r : R) : ConvertibleToResult = new ConvertibleToResult {
+  //def toResult = implicitly[Function[R,Result]].apply(r)
+  //}
+  implicit def toConvertibleToResult[R](r : R)(implicit doToResult : R => Result) : ConvertibleToResult = new ConvertibleToResult {
+    def toResult = doToResult(r)
+  }
+}
+trait ConvertibleToResult {
+  def toResult : Result
+}
+
+/*
+ * def compileAndRun(vm: VirtualMachine[A] forSome {type A}) {
+  vm.run(vm.compile)
+}
+ * 
+ * trait VirtualMachine[A] {
+  def compile: A
+  def run: A => Unit
+}
+ * */
+
 // using trait for the root of the AGT as recommended in http://twitter.github.io/effectivescala/
 sealed trait Formula[T] 
   extends Serializable {

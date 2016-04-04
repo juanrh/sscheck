@@ -351,9 +351,9 @@ ${rdd.take(DStreamProp.numSampleRecords).mkString(lineSeparator)}
   // volatile as those are read both from the foreachRDD below and the Prop.forall below
   // - only foreachRDD writes to currFormula
   // - DStreamTLProperty.forAllDStream reads currFormula
-  // thus using "the cheap read-write lock trick" https://www.ibm.com/developerworks/java/library/j-jtp06197/ 
+  // thus using "the cheap read-write lock trick" https://www.ibm.com/developerworks/java/library/j-jtp06197/
+  val currFormulaLock = new Serializable{}
   @transient @volatile var currFormula : NextFormula[U] = { 
-    val currFormulaLock = new Serializable{}
     inputDStream1
     .foreachRDD { (input1Batch, time) =>
       // NOTE: batch cannot be completed until this code finishes, use
@@ -405,14 +405,14 @@ ${rdd.take(DStreamProp.numSampleRecords).mkString(lineSeparator)}
     } match {
         case Success(_) => {}
         case Failure(_) => {
-          val e = TestCaseTimeoutException(batchInterval= batchInterval, 
+          val tcte = TestCaseTimeoutException(batchInterval= batchInterval, 
                                            batchCompletionTimeout = batchCompletionTimeout)
-          logger.error(e.getMessage) // FIXME should be private
+          logger.error(tcte.getMessage) // FIXME should be private
           Try { ssc.stop(stopSparkContext = false, stopGracefully = false) }
           // This exception will make the test case fail, in this case the 
           // failing test case is not important as this is a performance problem, not 
           // a counterexample that has been found
-          throw e
+          throw tcte
         }
       }    
   }
@@ -421,20 +421,18 @@ ${rdd.take(DStreamProp.numSampleRecords).mkString(lineSeparator)}
    *  
    *  TODO: consider moving this to DStreamTLProperty
    * */
-  def stop() : Unit = {
+  def stop() : Unit = 
     if (started) {
       Try { 
         logger.warn("stopping test Spark Streaming context")
         ssc.stop(stopSparkContext = false, stopGracefully = true)
-        started = false
       } recover {
           case _ => {
             logger.warn("second attempt forcing stop of test Spark Streaming context")
-            ssc.stop(stopSparkContext=false, stopGracefully=false)
-            started = false
+            ssc.stop(stopSparkContext = false, stopGracefully = false)
           }
-        }
+      }
+      started = false
     }
-  }
     
 }

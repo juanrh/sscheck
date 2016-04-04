@@ -4,11 +4,13 @@ name := "sscheck"
 
 organization := "es.ucm.fdi"
 
-version := "0.2.1" // "0.2.1-SNAPSHOT"
+version := "0.2.2" // "0.2.2-SNAPSHOT" // 
 
-scalaVersion := "2.10.5"
+scalaVersion := "2.10.6"
 
-crossScalaVersions  := Seq("2.10.5")
+autoScalaLibrary := false
+
+crossScalaVersions  := Seq("2.10.6")
 
 licenses += ("Apache-2.0", url("http://www.apache.org/licenses/LICENSE-2.0"))
 
@@ -16,7 +18,7 @@ bintrayPackageLabels := Seq("testing")
 
 bintrayVcsUrl := Some("git@github.com:juanrh/sscheck.git")   
 
-lazy val sparkVersion = "1.4.1"
+lazy val sparkVersion = "1.6.0"
 
 lazy val specs2Version = "3.6.4" 
 
@@ -55,9 +57,9 @@ libraryDependencies += "org.specs2" %% "specs2-matcher-extra" % specs2Version
 
 libraryDependencies += "org.specs2" %% "specs2-junit" % specs2Version
 
-libraryDependencies += "io.github.nicolasstucki" %% "multisets" % "0.1"
-
-libraryDependencies += "holdenk" % "spark-testing-base" % "1.3.0_0.2.0"
+libraryDependencies += "holdenk" % "spark-testing-base" % "1.6.1_0.3.2"
+// "1.6.0_0.3.1"
+//"1.3.0_0.2.0"
 
 // note this is discontinued for scala 2.11, which uses https://github.com/typesafehub/scala-logging#contribution-policy
 libraryDependencies += "com.typesafe" % "scalalogging-log4j_2.10" % "1.1.0"
