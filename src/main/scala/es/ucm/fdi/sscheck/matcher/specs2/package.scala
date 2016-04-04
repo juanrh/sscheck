@@ -20,7 +20,7 @@ package es.ucm.fdi.sscheck.matcher {
        *  Driver stacktrace:,org.apache.spark.SparkException: Job aborted due to stage failure: 
        *  Task 0 in stage 0.0 failed 1 times, most recent failure: Lost task 0.0 in stage 0.0 (TID 0, localhost): 
        *  java.io.InvalidClassException: org.specs2.execute.Success; no valid constructor 
-       *  }}
+       *  }}}
        * */
       def foreachRecord[T](predicate : T => Boolean) : Matcher[RDD[T]] = {  (rdd : RDD[T]) =>
         val failingRecords = rdd.filter(! predicate(_))
@@ -46,7 +46,7 @@ package es.ucm.fdi.sscheck.matcher {
        *  Driver stacktrace:,org.apache.spark.SparkException: Job aborted due to stage failure: 
        *  Task 0 in stage 0.0 failed 1 times, most recent failure: Lost task 0.0 in stage 0.0 (TID 0, localhost): 
        *  java.io.InvalidClassException: org.specs2.execute.Success; no valid constructor 
-       *  }}
+       *  }}}
        * */
       def existsRecord[T](predicate : T => Boolean) : Matcher[RDD[T]] = {  (rdd : RDD[T]) =>
         val exampleRecords = rdd.filter(predicate(_))

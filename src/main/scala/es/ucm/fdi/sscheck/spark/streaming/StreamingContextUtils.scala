@@ -19,7 +19,7 @@ object StreamingContextUtils {
     // val sv = new SyncVar[Unit]
     ssc.addStreamingListener(new StreamingListener {
       override def onReceiverStarted(receiverStarted: StreamingListenerReceiverStarted) : Unit = {
-        receiverStartedPromise success ()
+        receiverStartedPromise success Unit
         // sv.put(())
       }
     })
