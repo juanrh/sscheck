@@ -47,7 +47,7 @@ class StreamingFormulaDemo1
       transBatch(u).count === 1 and
       inBatch(u).count === transBatch(u).first 
     } during numBatches
-    
+/*    
     List((0,1)).map {case (x, y) => x }
     (0,1) match {case (x : Int, y@u) => x + y }
     import es.ucm.fdi.sscheck.prop.tl.Now
@@ -110,7 +110,7 @@ class StreamingFormulaDemo1
       case (inBatch, transBatch) =>
         transBatch.count === 1  and
         inBatch.count === transBatch.first
-      }
+      } */
 
     
 //    val f4 : Formula[U] = always { case (inBatch, transBatch) =>
@@ -133,7 +133,8 @@ class StreamingFormulaDemo1
     forAllDStream(
       gen)(
       testSubject)(
-      f6)//formula)
+      //f6)//
+      formula)
   }.set(minTestsOk = 10).verbose  
   
 }

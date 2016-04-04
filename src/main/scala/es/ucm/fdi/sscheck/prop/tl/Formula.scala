@@ -51,6 +51,26 @@ object Formula {
    * */
   def later[T](phi : Formula[T]) = eventually(phi)
   def always[T](phi : Formula[T]) = new TimeoutMissingFormula[T](Always(phi, _))  
+  
+  // FIXME don't mix concerns: first solve the quantifier problem and then 
+  // start with the partial function notation 
+  // FIXME should rename just to always so 1) allows for quantified formulas, 
+  // 2) allows partial function notation instead of at <-- or maybe not, note
+  // - functions to Result should be formulas to Solved: as there is no need to consume 
+  // more letters, and note Now consumes 1 letter
+  // - functions to Formula are just that
+  // - Now should be able to be used to define quantified formulas: think how
+  def now[T](a: T => Result): Formula[T] = 
+    Now(a)
+  def alwaysLQuant[T](a: T => Result): TimeoutMissingFormula[T] =
+    always(Now(a(_))) // this makes sense, but should be replaced by a generalization where Now doesn't exist TODO
+  def alwaysLQuant2[T](a: T => Formula[T]): TimeoutMissingFormula[T] =
+    always(NowLQuant(a))
+    
+  //  def allw2[T](a: T => Result): TimeoutMissingFormula[T] =
+//    always(Now(a(_)))
+  
+  /*
 //  def always[T, R <% Result](a : T => R)(implicit arg0: ClassTag[T]) : TimeoutMissingFormula[T] = {
 //    val phi : Formula[T] = Now(a)
 //    always(phi)
@@ -72,13 +92,7 @@ object Formula {
   def alwaysAt2[T,R](a : T => R)(implicit toResult: R => Result): TimeoutMissingFormula[T] = always(Now(a))
   //trait Baz[A] extends Turkle[Qux[A,?]]
   type Fr[T] = PartialFunction[T, R] forSome {type R}
-  //def all[T](a : Fr[T])(implicit toResult: R => Result): TimeoutMissingFormula[T] = always(Now(a))
-  //def all[T](a : PartialFunction[T, R] forSome {type R})(implicit toResult: R => Result): TimeoutMissingFormula[T] = always(Now(a))
   
-  // def allW2[T](a : T => R forSome {type R })(implicit toResult: R => Result): Unit = () // R out of scope in second arg
-  //def allW2[T](a : T => R forSome {type R <% Result}) : Unit = () // <% illegal bound for  existential types
-  //def allw2[T](a: T => R forSome {type R}) : TimeoutMissingFormula[T] =
-  //  always(Now( (t : T) => implicitly[Function[R,Result]].apply( a(t)))) // R out of scope
   def allw[T](a : T => R forSome {type R <: ConvertibleToResult}) 
              : TimeoutMissingFormula[T] = 
     always(Now( (t : T) => a(t).toResult)) 
@@ -93,20 +107,29 @@ object Formula {
   type ConvR[R] = R => Result
   //def allw3[T](a : T => R forSome {type R : ConvR}) : TimeoutMissingFormula[T] = ??? 
   
+  
+  //def all[T](a : Fr[T])(implicit toResult: R => Result): TimeoutMissingFormula[T] = always(Now(a))
+  //def all[T](a : PartialFunction[T, R] forSome {type R})(implicit toResult: R => Result): TimeoutMissingFormula[T] = always(Now(a))
+  
+  // def allW2[T](a : T => R forSome {type R })(implicit toResult: R => Result): Unit = () // R out of scope in second arg
+  //def allW2[T](a : T => R forSome {type R <% Result}) : Unit = () // <% illegal bound for  existential types
+  //def allw2[T](a: T => R forSome {type R}) : TimeoutMissingFormula[T] =
+  //  always(Now( (t : T) => implicitly[Function[R,Result]].apply( a(t)))) // R out of scope
+   *  */
 }
 
-object ConvertibleToResult {
-  // def toConvertibleToResult[R <% Result](r : R) : Result = implicitly[Function[R,Result]].apply(r)
-  //implicit def toConvertibleToResult[R <% Result](r : R) : ConvertibleToResult = new ConvertibleToResult {
-  //def toResult = implicitly[Function[R,Result]].apply(r)
-  //}
-  implicit def toConvertibleToResult[R](r : R)(implicit doToResult : R => Result) : ConvertibleToResult = new ConvertibleToResult {
-    def toResult = doToResult(r)
-  }
-}
-trait ConvertibleToResult {
-  def toResult : Result
-}
+//object ConvertibleToResult {
+//  // def toConvertibleToResult[R <% Result](r : R) : Result = implicitly[Function[R,Result]].apply(r)
+//  //implicit def toConvertibleToResult[R <% Result](r : R) : ConvertibleToResult = new ConvertibleToResult {
+//  //def toResult = implicitly[Function[R,Result]].apply(r)
+//  //}
+//  implicit def toConvertibleToResult[R](r : R)(implicit doToResult : R => Result) : ConvertibleToResult = new ConvertibleToResult {
+//    def toResult = doToResult(r)
+//  }
+//}
+//trait ConvertibleToResult {
+//  def toResult : Result
+//}
 
 /*
  * def compileAndRun(vm: VirtualMachine[A] forSome {type A}) {
@@ -199,6 +222,20 @@ object Now {
   } 
   
 }
+case class NowLQuant[T](p: T => Formula[T]) extends NextFormula[T] {
+  // FIXME: probably we cannot compute this now, because it depends
+  // on each particular test case. We could modify Formula.safeWordLength
+  // to return an Option that would be Some only if all these Now are 
+  // constant formulas. This is not a very important feature anyway
+  override def safeWordLength = ??? 
+  override def nextFormula = this
+  override def result = None
+  override def consume(atoms : T) = {
+    val phiConsumed = p(atoms)
+    phiConsumed.nextFormula 
+  }
+}
+
 case class Now[T](p : T => Prop.Status) extends NextFormula[T] {
   /* Note the case class structural equality gives an implementation
    * for equals equivalent to the one below, as a Function is only

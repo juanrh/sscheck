@@ -250,7 +250,7 @@ ${rdd.take(numSampleRecords).mkString(lineSeparator)}
         case Failure(_) => {
           val tcte = TestCaseTimeoutException(batchInterval= batchInterval, 
                                            batchCompletionTimeout = batchCompletionTimeout)
-          logger.error(tcte.getMessage) // FIXME should be private
+          logger.error(tcte.getMessage) 
           Try { ssc.stop(stopSparkContext = false, stopGracefully = false) }
           // This exception will make the test case fail, in this case the 
           // failing test case is not important as this is a performance problem, not 

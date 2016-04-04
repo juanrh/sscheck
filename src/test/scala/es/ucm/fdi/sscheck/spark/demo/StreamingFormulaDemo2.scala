@@ -73,20 +73,20 @@ class StreamingFormulaDemo2
       val noIdBanned = at(outBatch)(_.isEmpty)
       val badIdBanned = at(outBatch)(_ should existsRecord(_ == badId))
       
-      // if first order then we would not have to use a fixed  id for bad user
-      always[U, org.specs2.execute.Result] { case (inBatch, _) =>
-        val badIds = inBatch.filter{ case (_, isGood) => ! isGood }. keys
-        val n = always[U, org.specs2.execute.Result] { case (_, outBatch) =>
-          // note this could fail if badIds is empty: FIXME with implication, lo suyo
-          // seria aqui usar alguna operacion de conjuntos entre RDDs, pero OjO a lo q decia Holden
-          // ver comentarios en milestone de sscheck
-          outBatch should existsRecord(_ == badIds.take(1))
-        } during 3
-        // no puedo devolver n pq este overload de always construye un Always(Now(???)) y 
-        // Now solo acepta convertibles a Result en el resultado, pero no formulas
-        //true
-        n // esto cuela ahora pq he definido formulaToResult, q no esta nada claro q hace todavia, y q daria el primer orden
-      }
+//      // if first order then we would not have to use a fixed  id for bad user
+//      always[U, org.specs2.execute.Result] { case (inBatch, _) =>
+//        val badIds = inBatch.filter{ case (_, isGood) => ! isGood }. keys
+//        val n = always[U, org.specs2.execute.Result] { case (_, outBatch) =>
+//          // note this could fail if badIds is empty: FIXME with implication, lo suyo
+//          // seria aqui usar alguna operacion de conjuntos entre RDDs, pero OjO a lo q decia Holden
+//          // ver comentarios en milestone de sscheck
+//          outBatch should existsRecord(_ == badIds.take(1))
+//        } during 3
+//        // no puedo devolver n pq este overload de always construye un Always(Now(???)) y 
+//        // Now solo acepta convertibles a Result en el resultado, pero no formulas
+//        //true
+//        n // esto cuela ahora pq he definido formulaToResult, q no esta nada claro q hace todavia, y q daria el primer orden
+//      }
       
       ( ( allGoodInputs and noIdBanned ) until badIdBanned on headTimeout ) and
       ( always { badInput ==> (always(badIdBanned) during nestedTimeout) } during tailTimeout )  
