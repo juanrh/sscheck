@@ -56,8 +56,6 @@ values transformation and count action cannot be performed inside of the rdd1.ma
 
 This was due to a bad usage of an RDD matcher, see explanation below
    * */
-
-  
   type UserId = Long
   
   def listBannedUsers(ds : DStream[(UserId, Boolean)]) : DStream[UserId] = {
@@ -96,38 +94,27 @@ This was due to a bad usage of an RDD matcher, see explanation below
       val noIdBanned = at(outBatch)(_.isEmpty)
       //val badIdBanned = at(outBatch)(_ should existsRecord(_ == badId))
       
-      alwaysLQuant2[U] { case (inBatch, _) =>
+      always { now[U] { case (inBatch, _) =>
         val badIds = inBatch.filter{ case (_, isGood) => ! isGood }. keys
         println(s"found badIds = ${badIds.collect.mkString(",")}")
-        always { now[U] { case (_, outBatch) =>
-          /*
-           * this causes 
-           * 
-           * org.apache.spark.SparkException: Job aborted due to stage failure: Task 0 in stage 643.0 failed 1 times, most recent failure: Lost 
-task 0.0 in stage 643.0 (TID 836, localhost): org.apache.spark.SparkException: RDD transformations and actions can only be invoked 
-by the driver, not inside of other transformations; for example, rdd1.map(x => rdd2.values.count() * x) is invalid because the 
-values transformation and count action cannot be performed inside of the rdd1.map transformation. For more information, see SPARK-5063.
-
-				FIXME understand why
-           * */
-          // FIXME: should be RDD inclusion op, see holden talk on that
-          // NOTE  existsRecord calls filter(_ == badIds.take(1)(0)), hence that badIds.take(1) is called 
-          // in the closure executed at the workers, instead of in the driver
-         //if (badIds.count > 0) outBatch should existsRecord(_ == badIds.take(1)(0)) <-- NOTE here we have a take(1) inside a closure
-         //else true
-          
-          // This is basically the fixed version of above, but avoiding calling actions in the closure
-//          if (badIds.count > 0) {
-//            // collect called from the driver 
-//            val badId = badIds.take(1)(0)
-//            outBatch should existsRecord(_ == badId)
-//          } else true
+        always { nowR[U] { case (_, outBatch) =>
           badIds.subtract(outBatch).count === 0 // works ok FIXME see Holden presentation on RDD set operations
         }} during nestedTimeout
-      } during tailTimeout
-
+      }} during tailTimeout
       // FIXME: that formula should be improved for the negative case
       
+    //  ( ( allGoodInputs and noIdBanned ) until badIdBanned on headTimeout ) and
+    //  ( always { badInput ==> (always(badIdBanned) during nestedTimeout) } during tailTimeout )  
+    }  
+    
+    forAllDStream(    
+      gen)(
+      testSubject)( 
+      formula)
+  }.set(minTestsOk = 15).verbose  
+  
+  /*
+
 //      // if first order then we would not have to use a fixed  id for bad user
 //      always[U, org.specs2.execute.Result] { case (inBatch, _) =>
 //        val badIds = inBatch.filter{ case (_, isGood) => ! isGood }. keys
@@ -143,15 +130,7 @@ values transformation and count action cannot be performed inside of the rdd1.ma
 //        n // esto cuela ahora pq he definido formulaToResult, q no esta nada claro q hace todavia, y q daria el primer orden
 //      }
 //      
-    //  ( ( allGoodInputs and noIdBanned ) until badIdBanned on headTimeout ) and
-    //  ( always { badInput ==> (always(badIdBanned) during nestedTimeout) } during tailTimeout )  
-    }  
-    
-    forAllDStream(    
-      gen)(
-      testSubject)( 
-      formula)
-  }.set(minTestsOk = 2).verbose  
-  
+ *      
+   * */
   
 }

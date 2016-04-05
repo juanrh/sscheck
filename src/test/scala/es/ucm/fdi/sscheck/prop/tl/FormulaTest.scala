@@ -12,6 +12,7 @@ import org.specs2.execute.Result
 
 import Formula._
 
+/* TODO tests for formulas with quantifiers */
 @RunWith(classOf[JUnitRunner])
 class FormulaTest
   extends Specification 
@@ -90,7 +91,7 @@ class FormulaTest
     { (always(aP) during 3). nextFormula === and(aP, next(aP), next(next(aP))) } and
     //
     // until
-    { (aP until aQ on 1). nextFormula === aQ } and
+    { (aP until aQ on 1). nextFormula === aQ } and 
     { (aP until aQ on 2). nextFormula === or(aQ, and(aP, next(aQ))) } and 
     { (aP until aQ on 3). nextFormula === 
       or(aQ, and(aP, next(aQ)), and(aP, next(aP), next(next(aQ)))) } and
