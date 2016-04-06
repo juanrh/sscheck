@@ -97,8 +97,11 @@ This was due to a bad usage of an RDD matcher, see explanation below
       always { now[U] { case (inBatch, _) =>
         val badIds = inBatch.filter{ case (_, isGood) => ! isGood }. keys
         println(s"found badIds = ${badIds.collect.mkString(",")}")
-        always { nowR[U] { case (_, outBatch) =>
-          badIds.subtract(outBatch).count === 0 // works ok FIXME see Holden presentation on RDD set operations
+        always { now[U] { resultFunToFormulaFun{ case (_, outBatch) =>
+        //always { nowR[U] {  case (_, outBatch) =>
+          badIds.subtract(outBatch).count === 0 
+          // works ok FIXME see Holden presentation on RDD set operations
+       }
         }} during nestedTimeout
       }} during tailTimeout
       // FIXME: that formula should be improved for the negative case

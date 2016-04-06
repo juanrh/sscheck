@@ -19,7 +19,21 @@ object Formula {
   /** More succinct notation for Now formulas
    */
   implicit def resultFunToNow[T, R <% Result](p : T => R): Now[T] = Now(p)
-  implicit def propStatusFunToNow[T](p : T => Prop.Status) : Now[T] = Now.fromStatusFun(p)
+ // implicit def propStatusFunToNow[T](p : T => Prop.Status) : Now[T] = Now.fromStatusFun(p)
+  implicit def resultFunToFormulaFun[T, R <% Result](p: T => R): (T => Formula[T]) =
+    // p andThen Now.resultToPropStatus _ andThen Solved.apply _
+    p andThen implicitly[Function[R,Result]] andThen Now.resultToPropStatus _ andThen Solved.apply _
+    
+    // new Now[T](p andThen Solved.apply _)
+    //     fromStatusFun(p andThen implicitly[Function[R,Result]] andThen resultToPropStatus _)
+
+  /*
+   * FIXME move to suitable place
+   * Could use Shapeless coproducts / type unions https://github.com/milessabin/shapeless for this
+   * requiring a type union in the argument and then returnign different result depending on
+   * the matched type. But that would require macro paradise as this is scala 2.10, and in
+   * general it introduces a complex depenency that would make this library weaker
+   * */
   
   /** Builds a Now formula of type T by composing the projection proj on 
    *  T with an the assertion function p
@@ -35,12 +49,12 @@ object Formula {
    *  with a partial function literal
    * */
   // FIXME: don't like the name much, same problem with type erasure as Now.apply
-  def nowR[T](assertion: T => Result): Formula[T] = Now(assertion)
+ // def nowR[T](assertion: T => Result): Formula[T] = Now(assertion) // <- this should be covered by resultFunToNow
   /** Build a Now formula of type T, useful for defining a type context to define assertion
    *  with a partial function literal
    * */
   // FIXME: don't like the name much, same problem with type erasure as Now.apply
-  def nowS[T](assertion: T => Prop.Status): Formula[T] = Now.fromStatusFun(assertion)
+ // def nowS[T](assertion: T => Prop.Status): Formula[T] = Now.fromStatusFun(assertion)
 
   // builders for non temporal connectives: note these act as clever constructors
   // for Or and And
@@ -146,10 +160,10 @@ object Now {
    * or http://hacking-scala.org/post/73854628325/advanced-type-constraints-with-type-classes based or
    * using ClassTag. Also why is there no conflict with the companion apply?
    */
-  def fromStatusFun[T](p : T => Prop.Status): Now[T] =
-    new Now[T](p andThen Solved.apply _)
-  def apply[T, R <% Result](p : T => R): Now[T] = 
-    fromStatusFun(p andThen implicitly[Function[R,Result]] andThen resultToPropStatus _)
+  //def fromStatusFun[T](p : T => Prop.Status): Now[T] =
+  //  new Now[T](p andThen Solved.apply _)
+  //def apply[T, R <% Result](p : T => R): Now[T] = 
+  //  fromStatusFun(p andThen implicitly[Function[R,Result]] andThen resultToPropStatus _)
     
   /** Convert a Specs2 Result into a ScalaCheck Prop.Status
    * See 
