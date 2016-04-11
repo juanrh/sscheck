@@ -209,7 +209,7 @@ ${rdd.take(numSampleRecords).mkString(lineSeparator)}
            * each test case currFormula only gets to solved state once. 
            * */
           val trans1Batch = transformedStream1.slice(time, time).head
-          currFormula = currFormula.consume((input1Batch, trans1Batch))
+          currFormula = currFormula.consume(Time(time.milliseconds))((input1Batch, trans1Batch))
         }
       }
     }

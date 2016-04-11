@@ -25,6 +25,7 @@ class FormulaTest
       - where nextFormula is defined correctly $nextFormulaOk
       - where examples from the paper for nextFormula work as expected $nextFormulaPaper 
       - where evaluation with consume works correclty $consumeOk
+      - where Formula.next works ok when used for several times $nextTimes 
       - where safeWordLength is ok $pending
     """    
       
@@ -64,7 +65,7 @@ class FormulaTest
     { aP. nextFormula must not be_==(aQ) } and 
     // solved
     { 
-      val solvedP = aP. nextFormula. consume((3, "hola")) 
+      val solvedP = aP. nextFormula.consume(Time(0L))((3, "hola")) 
       solvedP. nextFormula === solvedP 
     } and
     //
@@ -135,12 +136,12 @@ class FormulaTest
       val phiNF = phi.nextFormula
       println(s"phi: $phi")
       println(s"phiNF: $phiNF")
-      val phiNF1 = phiNF consume(bL)
+      val phiNF1 = phiNF.consume(Time(0L))(bL)
       println(s"phiNF1: $phiNF1")
-      val phiNF2 = phiNF1 consume(bL)
+      val phiNF2 = phiNF1.consume(Time(1L))(bL)
       println(s"phiNF2: $phiNF2")
       // consuming a letter with a solution is ok and doesn't change the result
-      val phiNF3 = phiNF2 consume(bL)
+      val phiNF3 = phiNF2.consume(Time(3L))(bL)
       println(s"phiNF3: $phiNF3")
       ( phiNF.result must beNone ) and
       ( phiNF1.result must beNone ) and 
@@ -152,13 +153,13 @@ class FormulaTest
       println
       println(s"psi: $psi")
       println(s"psiNF: $psiNF")
-      val psiNF1 = psiNF consume(bL)
+      val psiNF1 = psiNF.consume(Time(4L))(bL)
       println(s"psiNF1: $psiNF1")
-      val psiNF2 = psiNF1 consume(bL)
+      val psiNF2 = psiNF1.consume(Time(5L))(bL)
       println(s"psiNF2: $psiNF2")
-      val psiNF3 = psiNF2 consume(abL)
+      val psiNF3 = psiNF2.consume(Time(6L))(abL)
       println(s"psiNF3: $psiNF3")
-      val psiNF4 = psiNF3 consume(aL)
+      val psiNF4 = psiNF3.consume(Time(7L))(aL)
       println(s"psiNF4: $psiNF4")
       ( psiNF.result must beNone ) and
       ( psiNF1.result must beNone ) and
@@ -166,7 +167,13 @@ class FormulaTest
       ( psiNF3.result must beNone ) and
       ( psiNF4.result must beSome(Prop.True) ) and
       ( psiNF4 must haveClass[Solved[_]] ) and
-      ( psiNF4.consume(aL) === psiNF4 )
+      ( psiNF4.consume(Time(8L))(aL) === psiNF4 )
     }
+  }
+  
+  def nextTimes = {
+    (next(1)(aP) === next(aP)) and 
+    (next(0)(aP) === aP) and 
+    (next(2)(aP) === next(next(aP)))
   }
 }
