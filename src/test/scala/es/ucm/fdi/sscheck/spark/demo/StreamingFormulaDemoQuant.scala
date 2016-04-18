@@ -79,6 +79,7 @@ class StreamingFormulaDemoQuant
     val (inBatch, outBatch) = ((_ : U)._1, (_ : U)._2)
     
     // This is my favorite
+    // doesn't work with always replacing alwaysF, send email
     val formula = alwaysF[U]{ case (inBatch, _) =>
       val badIds = inBatch.filter{ case (_, isGood) => ! isGood }. keys
       println(s"found badIds = ${badIds.collect.mkString(",")}")
@@ -87,6 +88,32 @@ class StreamingFormulaDemoQuant
         1 === 1
       } during nestedTimeout
     } during tailTimeout
+
+    alwaysNow[U](nowR[U]{case (_, outBatch) => 
+      0 === 0 })
+//    alwaysNow[U](nowU[U]{case (_, outBatch) => 
+//      0 === 0 })  
+   //   alwaysNow2[U]{case (_, outBatch) => 
+    //  0 === 0 }
+    
+//    val formulaN = alwaysF[U]{ case (inBatch, _) =>
+//      val badIds = inBatch.filter{ case (_, isGood) => ! isGood }. keys
+//      alwaysNow[U]{ case (_, outBatch) => 
+//          0 === 0
+//        
+//        
+//       
+//      } during nestedTimeout
+//      
+//    }during tailTimeout 
+          
+//          atomsConsumerToNow2[U]{case (_, outBatch) =>
+//        badIds.subtract(outBatch).count === 0 and 
+//        1 === 1
+//      } during nestedTimeout )
+//    } 
+    
+    
     
     import es.ucm.fdi.sscheck.prop.tl.{Now, Time}    
     val timeAlwaysIncreases = always(Now[U]{t1 => atoms1 => 

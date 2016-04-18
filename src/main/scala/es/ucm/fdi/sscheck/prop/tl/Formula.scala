@@ -18,10 +18,21 @@ object Formula {
                                                 (implicit t : Timeout) : Formula[T] = f.on(t)
   /** More succinct notation for Now formulas
    */
-  implicit def resultFunToNow[T, R <% Result](p : T => R): Now[T] = Now(p)
+  implicit def resultFunToNow[T, R <% Result](assertion : T => R): Now[T] = Now(assertion)
+  
+  implicit def statusFunToNow[T](assertion: T => Prop.Status): Now[T] = Now.fromStatusFun(assertion)
+  implicit def atomsConsumerToNow[T](atomsConsumer: T => Formula[T]): Now[T] = Now.fromAtomsConsumer(atomsConsumer)
+  
+  implicit def atomsConsumerToNow2[T](atomsConsumer: T => TimeoutMissingFormula[T]): TimeoutMissingFormula[T] = 
+    new TimeoutMissingFormula[T](timeout =>    
+      Now.fromAtomsConsumer[T]((atoms: T) => atomsConsumer(atoms).toFormula(timeout))
+     )
+    //Now.fromAtomsConsumer(atomsConsumer)
+  //  new TimeoutMissingFormula[T](Always(now, _))
+  
  // implicit def propStatusFunToNow[T](p : T => Prop.Status) : Now[T] = Now.fromStatusFun(p)
-  implicit def resultFunToFormulaFun[T, R <% Result](p: T => R): (T => Formula[T]) =
-    p andThen implicitly[Function[R,Result]] andThen resultToPropStatus _ andThen Solved.ofStatus _
+ // implicit def resultFunToFormulaFun[T, R <% Result](p: T => R): (T => Formula[T]) =
+  //  p andThen implicitly[Function[R,Result]] andThen resultToPropStatus _ andThen Solved.ofStatus _
     // p andThen implicitly[Function[R,Result]] andThen resultToPropStatus _ andThen Solved.apply _
     
     // new Now[T](p andThen Solved.apply _)
@@ -71,18 +82,57 @@ object Formula {
    *  with a partial function literal
    * */
   // FIXME: don't like the name much, same problem with type erasure as Now.apply
-  def nowF[T](assertion: T => Formula[T]): Formula[T] = Now.fromAtomsConsumer(assertion)
+  def nowF[T](assertion: T => Formula[T]): Now[T] = Now.fromAtomsConsumer(assertion)
   /** Build a Now formula of type T, useful for defining a type context to define assertion
    *  with a partial function literal
    * */
   // FIXME: don't like the name much, same problem with type erasure as Now.apply
- def nowR[T](assertion: T => Result): Formula[T] = Now.fromAtomsConsumer(assertion) // <- this should be covered by resultFunToNow
+ def nowR[T](assertion: T => Result): Now[T] = Now(assertion) 
+   // Now.fromAtomsConsumer(assertion) // <- this should be covered by resultFunToNow
   /** Build a Now formula of type T, useful for defining a type context to define assertion
    *  with a partial function literal
    * */
   // FIXME: don't like the name much, same problem with type erasure as Now.apply
- def nowS[T](assertion: T => Prop.Status): Formula[T] = Now.fromStatusFun(assertion)
+ def nowS[T](assertion: T => Prop.Status): Now[T] = Now.fromStatusFun(assertion)
 
+ //http://stackoverflow.com/questions/17841993/double-definition-error-despite-different-parameter-types
+ implicit object `T => Formula disambiguator`
+ def nowU[T](assertion: T => Formula[T])(implicit d: `T => Formula disambiguator`.type): Now[T] = Now.fromAtomsConsumer(assertion)
+ implicit object `R => Formula disambiguator`
+ def nowU[T](assertion: T => Result)(implicit d: `R => Formula disambiguator`.type): Now[T] = Now(assertion)
+ implicit object `R => Status disambiguator`
+ def nowU[T](assertion: T => Prop.Status)(implicit d: `R => Status disambiguator`.type): Now[T] = Now.fromStatusFun(assertion)
+ 
+ // http://stackoverflow.com/questions/3307427/scala-double-definition-2-methods-have-the-same-type-erasure
+  // def alwaysNow[T](now: Now[T]): TimeoutMissingFormula[T] = new TimeoutMissingFormula[T](Always(now, _))
+ //case class NowRes[T](assertion : T => Result)
+ //implicit def resultFunToNowRes[T](assertion : T => Result) = NowRes[T](assertion)
+ case class NowRes[T](assertion : PartialFunction[T, Result])
+ implicit def resultFunToNowRes[T](assertion : PartialFunction[T, Result]) = NowRes[T](assertion)
+ def alwaysNow2[T](assertion: NowRes[T]) : TimeoutMissingFormula[T] = {
+   val now = resultFunToNow(assertion.assertion)
+   new TimeoutMissingFormula[T](Always(now, _))
+ }
+ 
+ 
+ /*
+  *   implicit def resultFunToNow[T, R <% Result](assertion : T => R): Now[T] = Now(assertion)
+  
+  implicit def statusFunToNow[T](assertion: T => Prop.Status): Now[T] = Now.fromStatusFun(assertion)
+  implicit def atomsConsumerToNow[T](atomsConsumer: T => Formula[T]): Now[T] = Now.fromAtomsConsumer(atomsConsumer)
+  * */
+ 
+ case class IntList(list: List[Int])
+case class StringList(list: List[String])
+
+implicit def il(list: List[Int]) = IntList(list)
+implicit def sl(list: List[String]) = StringList(list)
+
+def foo(i: IntList) { println("Int: " + i.list)}
+def foo(s: StringList) { println("String: " + s.list)}
+ 
+
+ 
 // // now with type union
 // import scalaz.{\/, \/-, -\/}
 // //implicit def toResultToNowUnion[T](toResult: T => Result) = -\/(\/-(toResult)) 
@@ -129,7 +179,10 @@ def foo(s: StringList) { println("String: " + s.list)}
  def alwaysR[T](assertion: T => Result): TimeoutMissingFormula[T] = new TimeoutMissingFormula[T](Always(Now(assertion), _))
  def alwaysS[T](assertion: T => Prop.Status): TimeoutMissingFormula[T] = new TimeoutMissingFormula[T](Always(Now.fromStatusFun(assertion), _))
  def alwaysF[T](assertion: T => Formula[T]): TimeoutMissingFormula[T] = new TimeoutMissingFormula[T](Always(Now.fromAtomsConsumer(assertion), _))
+ // could also dothis to favor the common case
+ def always[T](assertion: T => Formula[T]): TimeoutMissingFormula[T] = alwaysF[T](assertion)
  
+ def alwaysNow[T](now: Now[T]): TimeoutMissingFormula[T] = new TimeoutMissingFormula[T](Always(now, _))
  
    //
  //def alwaysU[T](phi : Formula[T]) = new TimeoutMissingFormula[T](Always(phi, _))
@@ -222,6 +275,50 @@ scala> implicitly[Byte ∈ StringOrInt]
     
 }
 
+
+case class C[T](x: T)
+object O {
+  def f[T](g: T => C[T]): C[T] = ???
+  def f[T](v: C[T]): C[T] = ???
+  def fFun[T](g: T => C[T]): C[T] = f(g)
+}
+object M {
+  import O._
+  val v1 = f[Int](C(0))
+  /*
+missing parameter type for expanded function The argument types of an anonymous function must be fully known. 
+(SLS 8.5) Expected type was: ?	
+
+overloaded method value f with alternatives:   (v: es.ucm.fdi.sscheck.prop.tl.C[(Int, Boolean)])
+es.ucm.fdi.sscheck.prop.tl.C[(Int, Boolean)] <and>   
+(g: ((Int, Boolean)) => es.ucm.fdi.sscheck.prop.tl.C[(Int, Boolean)])es.ucm.fdi.sscheck.prop.tl.C[(Int, Boolean)]  
+cannot be applied to (<error> => es.ucm.fdi.sscheck.prop.tl.C[(Any, Any)])		
+
+
+type mismatch;  found   : Int(1)  required: String	
+
+   * */
+//  val v2 = f[(Int, Boolean)]{ case (x, b) => 
+//    C((x, b))  
+//  }
+    /*
+missing parameter type for expanded function The argument types of an anonymous function must be fully known. 
+(SLS 8.5) Expected type was: ?	
+
+type mismatch;  found   : Int(1)  required: String	
+◾value && is not a member of Any
+   * */
+//  val v2b = f[(Int, Boolean)]{ case (x, b) => 
+//    C((x+1, b && true))  
+//  }
+  val v3 = fFun[(Int, Boolean)]{ case (x, b) => 
+    C((x+1, b && true))  
+  }
+  
+  val h = (xb: (Int, Boolean)) => C((xb._1+1, xb._2 && true))
+  val v4 = fFun[(Int, Boolean)](h)
+}
+
 // using trait for the root of the AGT as recommended in http://twitter.github.io/effectivescala/
 sealed trait Formula[T] 
   extends Serializable {
@@ -284,47 +381,32 @@ case class Solved[T](status : Prop.Status) extends NextFormula[T] {
   override def consume(time: Time)(atoms : T) = this
 } // FIXME move up or change criteria for all classes
 object Solved {
-  def apply[T](result: Result) = new Solved[T](Formula.resultToPropStatus(result))
-  def ofStatus[T](status : Prop.Status): Solved[T] = Solved(status) // workaround FIXME?
-  def f(x: Prop.Status) = Solved(x)
+  def apply[T](result: Result) = ofResult[T](result)
+  // these are needed to resolve ambiguities with apply
+  def ofResult[T](result: Result): Solved[T] = new Solved[T](Formula.resultToPropStatus(result))
+  def ofStatus[T](status : Prop.Status): Solved[T] = Solved(status) 
 }
-
-/* FIXME
- * def union[T](t: T)(implicit c: (T =:= String) Or (T =:= Int)) = t match {
-  case s: String => println(s"Some nice string: $s")
-  case i: Int => println(s"Some int: $i")
-}
-type V[A, B] = {type l[T] = (T <:< A) Or (T <:< B)}
-
- * */
 
 /** Formulas that have to be resolved now, which correspond to atomic proposition
  *  as functions from the current state of the system to Specs2 assertions. 
  *  Note this also includes top / true and bottom / false as constant functions
  */
 object Now { 
-  /* from now going for avoiding the type erasure problem, TODO check more sophisticated
+  /* for now going for avoiding the type erasure problem, TODO check more sophisticated
    * solutions like http://hacking-scala.org/post/73854628325/advanced-type-constraints-with-type-classes 
    * or http://hacking-scala.org/post/73854628325/advanced-type-constraints-with-type-classes based or
    * using ClassTag. Also why is there no conflict with the companion apply?
-   */
- // private def ignoreTime[T](time: Time, atoms: T) = atoms  
+   */  
   def fromAtomsConsumer[T](atomsConsumer: T => Formula[T]): Now[T] = 
-
     new Now[T](Function.const(atomsConsumer))
   def fromStatusFun[T](atomsToStatus : T => Prop.Status): Now[T] =
-   new Now[T](Function.const(atomsToStatus andThen Solved.ofStatus _))  
-   // new Now[T](Function.const(atoms => Solved(atomsToStatus(atoms))))
-    // new Now[T](Function.const(atomsToStatus andThen Solved.apply _)) // this stops working with the override of Solved
-
+    new Now[T](Function.const(atomsToStatus andThen Solved.ofStatus _))  
   def apply[T, R <% Result](atomsToResult : T => R): Now[T] =
-    fromStatusFun(atomsToResult andThen implicitly[Function[R,Result]] andThen Formula.resultToPropStatus _)
-     // fromStatusFun(p andThen implicitly[Function[R,Result]] andThen resultToPropStatus _)  
+    new Now[T](Function.const(atomsToResult andThen implicitly[Function[R,Result]] andThen Solved.ofResult _))  
 }
 
-//   def consume(time: Time, atoms: T): NextFormula[T] = 
-case class Now[T](timedAtomsConsumer: Time => T => Formula[T]) extends NextFormula[T] {
-//case class Now[T](p : T => Formula[T]) extends NextFormula[T] {
+case class Now[T](timedAtomsConsumer: Time => T => Formula[T]) 
+  extends NextFormula[T] {
   /* Note the case class structural equality gives an implementation
    * for equals equivalent to the one below, as a Function is only
    * equal to references to the same function, which corresponds to 
@@ -349,10 +431,6 @@ case class Now[T](timedAtomsConsumer: Time => T => Formula[T]) extends NextFormu
   // override def consume(atoms : T) = Solved(p(atoms)) FIXME remove
   override def consume(time: Time)(atoms: T) = 
     timedAtomsConsumer(time)(atoms).nextFormula 
-//  {
-//    val phiConsumed = p(atoms)
-//    phiConsumed.nextFormula 
-//  }
 }
 case class Not[T](phi : Formula[T]) extends Formula[T] {
   override def safeWordLength = phi safeWordLength
