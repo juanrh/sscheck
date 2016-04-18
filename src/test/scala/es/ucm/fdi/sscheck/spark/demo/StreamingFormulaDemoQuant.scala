@@ -89,7 +89,7 @@ class StreamingFormulaDemoQuant
       } during nestedTimeout
     } during tailTimeout
 
-    alwaysNow[U](nowR[U]{case (_, outBatch) => 
+    always[U](now[U]{case (_, outBatch) => 
       0 === 0 })
 //    alwaysNow[U](nowU[U]{case (_, outBatch) => 
 //      0 === 0 })  
@@ -127,7 +127,7 @@ class StreamingFormulaDemoQuant
       always { nowF[U] { case (inBatch, _) =>
         val badIds = inBatch.filter{ case (_, isGood) => ! isGood }. keys
         println(s"found badIds = ${badIds.collect.mkString(",")}")
-        always { nowR[U] {  case (_, outBatch) =>
+        always { now[U] {  case (_, outBatch) =>
           badIds.subtract(outBatch).count === 0 
          
         }} during nestedTimeout

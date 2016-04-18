@@ -20,23 +20,13 @@ object Formula {
    */
   implicit def resultFunToNow[T, R <% Result](assertion : T => R): Now[T] = Now(assertion)
   
+  /** More succinct notation for Now formulas
+   */
   implicit def statusFunToNow[T](assertion: T => Prop.Status): Now[T] = Now.fromStatusFun(assertion)
+  
+  /** More succinct notation for Now formulas
+   */
   implicit def atomsConsumerToNow[T](atomsConsumer: T => Formula[T]): Now[T] = Now.fromAtomsConsumer(atomsConsumer)
-  
-  implicit def atomsConsumerToNow2[T](atomsConsumer: T => TimeoutMissingFormula[T]): TimeoutMissingFormula[T] = 
-    new TimeoutMissingFormula[T](timeout =>    
-      Now.fromAtomsConsumer[T]((atoms: T) => atomsConsumer(atoms).toFormula(timeout))
-     )
-    //Now.fromAtomsConsumer(atomsConsumer)
-  //  new TimeoutMissingFormula[T](Always(now, _))
-  
- // implicit def propStatusFunToNow[T](p : T => Prop.Status) : Now[T] = Now.fromStatusFun(p)
- // implicit def resultFunToFormulaFun[T, R <% Result](p: T => R): (T => Formula[T]) =
-  //  p andThen implicitly[Function[R,Result]] andThen resultToPropStatus _ andThen Solved.ofStatus _
-    // p andThen implicitly[Function[R,Result]] andThen resultToPropStatus _ andThen Solved.apply _
-    
-    // new Now[T](p andThen Solved.apply _)
-    //     fromStatusFun(p andThen implicitly[Function[R,Result]] andThen resultToPropStatus _)
 
  /** Convert a Specs2 Result into a ScalaCheck Prop.Status
    * See 
@@ -58,181 +48,57 @@ object Formula {
     case dec : org.specs2.execute.DecoratedResult[_] => resultToPropStatus(dec.result)    
     case _ => Prop.Undecided
   }   
-    
-  /*
-   * FIXME move to suitable place
-   * Could use Shapeless coproducts / type unions https://github.com/milessabin/shapeless for this
-   * requiring a type union in the argument and then returnign different result depending on
-   * the matched type. But that would require macro paradise as this is scala 2.10, and in
-   * general it introduces a complex depenency that would make this library weaker
+  
+  /* For overloads the criteria is: 
+   * - avoid overload for Function, because Scala forbids them
+   * - I haven't been able to make the techniques in http://stackoverflow.com/questions/3307427/scala-double-definition-2-methods-have-the-same-type-erasure
+   * and http://stackoverflow.com/questions/17841993/double-definition-error-despite-different-parameter-types to work. Neither Scalaz type
+   * unions. The main goal was defining an overload like Formula.always for and argument of type (T) => Result vs argument Formula[T] when using with 
+   * formulas defined with the case syntax https://groups.google.com/forum/#!topic/scala-user/rkau5IcuH48  
+   * - Shapeless could be an option to explore in the future, although it introduces a complex
+   * dependency, specially for Scala 2.10 that doesn't have macros by default. Could explore this in the future
+   * - When a overload is required we'll use the following strategy to avoid it:
+   *   * For overloads for functions to Result, Prop.Status, and Formula, replace overloads for pattern f 
+   *   for T => Result, fS for T => Prop.Status, and fF for T => Formula[T], see example for at()
+   *   * For overloads for the 3 functions in the previous item, plus for Formula[T], use f for the Formula[T]
+   *   and T => Formula[T], and then for fR for T => R <% Result, and fS for T => Prop.Status, and fF for T => Formula[T]. 
+   *   The result version has two version for T => Formula[T] because the overload doesn't works ok for functions defined 
+   *   with the case syntax (see https://groups.google.com/forum/#!topic/scala-user/rkau5IcuH48). See example for always() 
    * */
   
   /** Builds a Now formula of type T by composing the projection proj on 
+   *  T with an the assertion function assertion
+   */
+  def at[T, A, R <% Result](proj : (T) => A)(assertion : A => R): Now[T] = 
+    now(proj andThen assertion andThen implicitly[Function[R, Result]])
+    
+  /** Builds a Now formula of type T by composing the projection proj on 
    *  T with an the assertion function p
    */
-  def at[T, A, R <% Result](proj : (T) => A)(p : A => R): Now[T] = Now(p compose proj)
-  def atF[T, A](proj : (T) => A)(p : A => Formula[T]): Now[T] =
-    Now.fromAtomsConsumer(p compose proj)
-    //Now(p compose proj)
+  def atS[T, A](proj : (T) => A)(assertion: A => Prop.Status): Now[T] = nowS(assertion compose proj)
+  
+  /** Builds a Now formula of type T by composing the projection proj on 
+   *  T with an the atom consumer function atomsConsumer
+   */
+  def atF[T, A](proj : (T) => A)(atomsConsumer : A => Formula[T]): Now[T] = nowF(atomsConsumer compose proj)
+  
+  /** Build a Now formula of type T, useful for defining a type context to define assertion
+  *  with a partial function literal
+  * */
+  def now[T](assertion: T => Result): Now[T] = Now(assertion)
 
-  // FIXME probably uselesss
-  def form[T](phi: Formula[T]) = phi
+  /** Build a Now formula of type T, useful for defining a type context to define assertion
+   *  with a partial function literal
+   * */
+  // could use the implicits converstions to Now here and elsewhere, but I think being
+  // explicit is more clear 
+  def nowS[T](assertion: T => Prop.Status): Now[T] = statusFunToNow(assertion)
   
   /** Build a Now formula of type T, useful for defining a type context to define assertion
    *  with a partial function literal
    * */
-  // FIXME: don't like the name much, same problem with type erasure as Now.apply
-  def nowF[T](assertion: T => Formula[T]): Now[T] = Now.fromAtomsConsumer(assertion)
-  /** Build a Now formula of type T, useful for defining a type context to define assertion
-   *  with a partial function literal
-   * */
-  // FIXME: don't like the name much, same problem with type erasure as Now.apply
- def nowR[T](assertion: T => Result): Now[T] = Now(assertion) 
-   // Now.fromAtomsConsumer(assertion) // <- this should be covered by resultFunToNow
-  /** Build a Now formula of type T, useful for defining a type context to define assertion
-   *  with a partial function literal
-   * */
-  // FIXME: don't like the name much, same problem with type erasure as Now.apply
- def nowS[T](assertion: T => Prop.Status): Now[T] = Now.fromStatusFun(assertion)
+  def nowF[T](assertion: T => Formula[T]): Now[T] = atomsConsumerToNow(assertion)
 
- //http://stackoverflow.com/questions/17841993/double-definition-error-despite-different-parameter-types
- implicit object `T => Formula disambiguator`
- def nowU[T](assertion: T => Formula[T])(implicit d: `T => Formula disambiguator`.type): Now[T] = Now.fromAtomsConsumer(assertion)
- implicit object `R => Formula disambiguator`
- def nowU[T](assertion: T => Result)(implicit d: `R => Formula disambiguator`.type): Now[T] = Now(assertion)
- implicit object `R => Status disambiguator`
- def nowU[T](assertion: T => Prop.Status)(implicit d: `R => Status disambiguator`.type): Now[T] = Now.fromStatusFun(assertion)
- 
- // http://stackoverflow.com/questions/3307427/scala-double-definition-2-methods-have-the-same-type-erasure
-  // def alwaysNow[T](now: Now[T]): TimeoutMissingFormula[T] = new TimeoutMissingFormula[T](Always(now, _))
- //case class NowRes[T](assertion : T => Result)
- //implicit def resultFunToNowRes[T](assertion : T => Result) = NowRes[T](assertion)
- case class NowRes[T](assertion : PartialFunction[T, Result])
- implicit def resultFunToNowRes[T](assertion : PartialFunction[T, Result]) = NowRes[T](assertion)
- def alwaysNow2[T](assertion: NowRes[T]) : TimeoutMissingFormula[T] = {
-   val now = resultFunToNow(assertion.assertion)
-   new TimeoutMissingFormula[T](Always(now, _))
- }
- 
- 
- /*
-  *   implicit def resultFunToNow[T, R <% Result](assertion : T => R): Now[T] = Now(assertion)
-  
-  implicit def statusFunToNow[T](assertion: T => Prop.Status): Now[T] = Now.fromStatusFun(assertion)
-  implicit def atomsConsumerToNow[T](atomsConsumer: T => Formula[T]): Now[T] = Now.fromAtomsConsumer(atomsConsumer)
-  * */
- 
- case class IntList(list: List[Int])
-case class StringList(list: List[String])
-
-implicit def il(list: List[Int]) = IntList(list)
-implicit def sl(list: List[String]) = StringList(list)
-
-def foo(i: IntList) { println("Int: " + i.list)}
-def foo(s: StringList) { println("String: " + s.list)}
- 
-
- 
-// // now with type union
-// import scalaz.{\/, \/-, -\/}
-// //implicit def toResultToNowUnion[T](toResult: T => Result) = -\/(\/-(toResult)) 
-//  
-// def now[T](assertion: (T => Formula[T]) \/ (T => Result) \/ (T => Prop.Status)): Formula[T] = 
-//   assertion match {
-//    case -\/(assertion) => assertion match {
-//      case -\/(toFormula) => Now(toFormula) 
-//      case \/-(toResult) => Now(toResult) 
-//    } 
-//    case \/-(toStatus) => Now.fromStatusFun(toStatus)
-//  } 
-
- /*
-  * case class IntList(list: List[Int])
-case class StringList(list: List[String])
-
-implicit def il(list: List[Int]) = IntList(list)
-implicit def sl(list: List[String]) = StringList(list)
-
-def foo(i: IntList) { println("Int: " + i.list)}
-def foo(s: StringList) { println("String: " + s.list)}
-  * */
- 
- /*
-  From http://stackoverflow.com/questions/3307427/scala-double-definition-2-methods-have-the-same-type-erasure
-  See also 
-   - http://stackoverflow.com/questions/17841993/double-definition-error-despite-different-parameter-types
-   - http://stackoverflow.com/questions/2510108/why-avoid-method-overloading/2512001#2512001
-  * */
-// case class ToResultFun[T](f: T => Result)
-// case class ToFormulaFun[T](f: T => Formula[T])
-// case class ToStatusFun[T](f: T => Prop.Status)
-// implicit def fun2toResultFun[T](f: T => Result) = ToResultFun(f)
-// implicit def fun2toFormulaFun[T](f: T => Formula[T]) = ToFormulaFun(f)
-// implicit def fun2toStatusFun[T](f: T => Prop.Status) = ToStatusFun(f)
-// def alwaysU[T](phi : Formula[T]): TimeoutMissingFormula[T] = new TimeoutMissingFormula[T](Always(phi, _))
-// def alwaysU[T](toResult: ToResultFun[T]): TimeoutMissingFormula[T] = new TimeoutMissingFormula[T](Always(Now(toResult.f), _))
-// def alwaysU[T](toResult: ToFormulaFun[T]): TimeoutMissingFormula[T] = new TimeoutMissingFormula[T](Always(Now(toResult.f), _))
-// def alwaysU[T](toResult: ToStatusFun[T]): TimeoutMissingFormula[T] = new TimeoutMissingFormula[T](Always(Now.fromStatusFun(toResult.f), _))
-
- // if what I want is to avoid now, the simplest thing, which also avoid override, is having this in always. One version per argument type
- // def always[T](phi : Formula[T]): TimeoutMissingFormula[T] = .. as usual
- def alwaysR[T](assertion: T => Result): TimeoutMissingFormula[T] = new TimeoutMissingFormula[T](Always(Now(assertion), _))
- def alwaysS[T](assertion: T => Prop.Status): TimeoutMissingFormula[T] = new TimeoutMissingFormula[T](Always(Now.fromStatusFun(assertion), _))
- def alwaysF[T](assertion: T => Formula[T]): TimeoutMissingFormula[T] = new TimeoutMissingFormula[T](Always(Now.fromAtomsConsumer(assertion), _))
- // could also dothis to favor the common case
- def always[T](assertion: T => Formula[T]): TimeoutMissingFormula[T] = alwaysF[T](assertion)
- 
- def alwaysNow[T](now: Now[T]): TimeoutMissingFormula[T] = new TimeoutMissingFormula[T](Always(now, _))
- 
-   //
- //def alwaysU[T](phi : Formula[T]) = new TimeoutMissingFormula[T](Always(phi, _))
- //def alwaysU[T](toResult: T => Result) = new TimeoutMissingFormula[T](Always(Now(toResult), _))
- //def alwaysU[T](toFormula: T => Formula[T]) = new TimeoutMissingFormula[T](Always(Now(toFormula), _))
-
- 
- 
-// import scalaz.UnionTypes._
-// import scala.reflect.ClassTag
-// type toFormulaOrToResult[T] = t[T => Formula[T]]#t[T => Result]
-// // see translations of non-ASCII scalaz symbols in the source, as 
-// // referred e.g. in http://docs.typelevel.org/api/scalaz/stable/7.0.4/doc/index.html#scalaz.UnionTypes
-// //def nowUn[T,F](assertion: F[T])(implicit ev: Contains[T[F], toFormulaOrToResult[T]]): Int = 
-// def nowUn[T:ClassTag, F:ClassTag](assertion: F)
-//                (implicit ev: Contains[F, toFormulaOrToResult[T]]): Formula[T] = 
-//   assertion match {
-//     case toResult: (T => Result) => Now(toResult)
-//     case toFormula: (T => Formula[T]) => Now(toFormula) // unreachable code => useless
-//   }
-   
- /*
- scala> import UnionTypes._
-import UnionTypes._
-
-scala> type StringOrInt = t[String]#t[Int]
-defined type alias StringOrInt
-
-scala> def size[A](a: A)(implicit ev: A ∈ StringOrInt): Int = a match {
-         case i: Int    => i
-         case s: String => s.length  
-       }
-size: [A](a: A)(implicit ev: scalaz.UnionTypes.∈[A,StringOrInt])Int
-
-scala> size(23)
-res2: Int = 23
-
-scala> size("foo")
-res3: Int = 3
-
-scala> implicitly[Int ∈ StringOrInt]
-res0: scalaz.UnionTypes.∈[Int,StringOrInt] = <function1>
-
-scala> implicitly[Byte ∈ StringOrInt]
-<console>:18: error: Cannot prove that Byte <:< StringOrInt.
-              implicitly[Byte ∈ StringOrInt]
-                        ^
-
-  * */
- 
   // builders for non temporal connectives: note these act as clever constructors
   // for Or and And
   def or[T](phis : Formula[T]*): Formula[T] =
@@ -246,6 +112,19 @@ scala> implicitly[Byte ∈ StringOrInt]
     
   // builders for temporal connectives
   def next[T](phi : Formula[T]): Formula[T] = Next(phi)
+  /** Applies next to a now built with assertion
+   * */
+  def next[T](assertion : T => Formula[T]): Formula[T] = nextF(assertion)
+  /** Applies next to a now built with assertion
+   * */
+  def nextR[T](assertion : T => Result): Formula[T] = next(now(assertion))
+  /** Applies next to a now built with assertion
+   * */
+  def nextS[T](assertion : T => Prop.Status): Formula[T] = next(nowS(assertion))
+  /** Applies next to a now built with assertion
+   * */
+  def nextF[T](assertion : T => Formula[T]): Formula[T] = next(nowF(assertion))
+  
   /** @return the result of applying next to phi the number of
    *  times specified
    * */
@@ -253,70 +132,56 @@ scala> implicitly[Byte ∈ StringOrInt]
     require(times >= 0, s"times should be >=0, found $times")    
     (1 to times).foldLeft(phi) { (f, _) => new Next[T](f) }
   }
-  def eventually[T](phi : Formula[T]) = new TimeoutMissingFormula[T](Eventually(phi, _))
+  // cannot have overload next[T](times: Int)(phi: T => Formula[T]) due to currification
+  /** Applies next times times to a now built with assertion
+   * */
+  def nextR[T](times: Int)(assertion: T => Result): Formula[T] = 
+    next(times)(now(assertion))
+  /** Applies next times times to a now built with assertion
+   * */
+  def nextS[T](times: Int)(assertion: T => Prop.Status): Formula[T] = 
+    next(times)(nowS(assertion))
+  /** Applies next times times to a now built with assertion
+   * */
+  def nextF[T](times: Int)(assertion: T => Formula[T]): Formula[T] = 
+    next(times)(nowF(assertion))
+  
+  def eventually[T](phi : Formula[T]): TimeoutMissingFormula[T] = new TimeoutMissingFormula[T](Eventually(phi, _))
+  /** Applies eventually to a now built with assertion
+   * */
+  def eventually[T](assertion : T => Formula[T]): TimeoutMissingFormula[T] = eventuallyF(assertion)
+  /** Applies eventually to a now built with assertion
+  * */
+  def eventuallyR[T](assertion : T => Result): TimeoutMissingFormula[T] = eventually(now(assertion))
+  /** Applies eventually to a now built with assertion
+  * */
+  def eventuallyS[T](assertion : T => Prop.Status): TimeoutMissingFormula[T] = eventually(nowS(assertion))
+  /** Applies eventually to a now built with assertion
+  * */
+  def eventuallyF[T](assertion : T => Formula[T]): TimeoutMissingFormula[T] = eventually(nowF(assertion))
+ 
   /** Alias of eventually that can be used when there is a name class, for example 
    *  with EventuallyMatchers.eventually 
    * */
   def later[T](phi : Formula[T]) = eventually(phi)
-  def always[T](phi : Formula[T]) = new TimeoutMissingFormula[T](Always(phi, _))  
+  def later[T](assertion : T => Formula[T]) = eventually(assertion)
+  def laterR[T](assertion : T => Result) = eventuallyR(assertion)
+  def laterS[T](assertion : T => Prop.Status) = eventuallyS(assertion)
+  def laterF[T](assertion : T => Formula[T]) = eventuallyF(assertion)
   
-  // FIXME don't mix concerns: first solve the quantifier problem and then 
-  // start with the partial function notation. now() can be used for the first concern to start 
-  // FIXME should rename just to always so 1) allows for quantified formulas, 
-  // 2) allows partial function notation instead of at <-- or maybe not, note
-  // - functions to Result should be formulas to Solved: as there is no need to consume 
-  // more letters, and note Now consumes 1 letter
-  // - functions to Formula are just that
-  // - Now should be able to be used to define quantified formulas: think how
-//  def alwaysLQuant[T](a: T => Result): TimeoutMissingFormula[T] =
-//    always(Now(a(_))) // this makes sense, but should be replaced by a generalization where Now doesn't exist TODO
-//  def alwaysLQuant2[T](a: T => Formula[T]): TimeoutMissingFormula[T] =
-//    always(NowLQuant(a))
-    
-}
-
-
-case class C[T](x: T)
-object O {
-  def f[T](g: T => C[T]): C[T] = ???
-  def f[T](v: C[T]): C[T] = ???
-  def fFun[T](g: T => C[T]): C[T] = f(g)
-}
-object M {
-  import O._
-  val v1 = f[Int](C(0))
-  /*
-missing parameter type for expanded function The argument types of an anonymous function must be fully known. 
-(SLS 8.5) Expected type was: ?	
-
-overloaded method value f with alternatives:   (v: es.ucm.fdi.sscheck.prop.tl.C[(Int, Boolean)])
-es.ucm.fdi.sscheck.prop.tl.C[(Int, Boolean)] <and>   
-(g: ((Int, Boolean)) => es.ucm.fdi.sscheck.prop.tl.C[(Int, Boolean)])es.ucm.fdi.sscheck.prop.tl.C[(Int, Boolean)]  
-cannot be applied to (<error> => es.ucm.fdi.sscheck.prop.tl.C[(Any, Any)])		
-
-
-type mismatch;  found   : Int(1)  required: String	
-
+  def always[T](phi : Formula[T]) = new TimeoutMissingFormula[T](Always(phi, _))
+  /** Applies always to a now built with assertion
    * */
-//  val v2 = f[(Int, Boolean)]{ case (x, b) => 
-//    C((x, b))  
-//  }
-    /*
-missing parameter type for expanded function The argument types of an anonymous function must be fully known. 
-(SLS 8.5) Expected type was: ?	
-
-type mismatch;  found   : Int(1)  required: String	
-◾value && is not a member of Any
+  def always[T](assertion: T => Formula[T]): TimeoutMissingFormula[T] = alwaysF[T](assertion)
+  /** Applies always to a now built with assertion
    * */
-//  val v2b = f[(Int, Boolean)]{ case (x, b) => 
-//    C((x+1, b && true))  
-//  }
-  val v3 = fFun[(Int, Boolean)]{ case (x, b) => 
-    C((x+1, b && true))  
-  }
-  
-  val h = (xb: (Int, Boolean)) => C((xb._1+1, xb._2 && true))
-  val v4 = fFun[(Int, Boolean)](h)
+  def alwaysR[T](assertion: T => Result): TimeoutMissingFormula[T] = always(now(assertion))
+  /** Applies always to a now built with assertion
+   * */
+  def alwaysS[T](assertion: T => Prop.Status): TimeoutMissingFormula[T] = always(nowS(assertion))
+  /** Applies always to a now built with assertion
+   * */
+  def alwaysF[T](assertion: T => Formula[T]): TimeoutMissingFormula[T] = always(nowF(assertion))    
 }
 
 // using trait for the root of the AGT as recommended in http://twitter.github.io/effectivescala/
@@ -331,9 +196,36 @@ sealed trait Formula[T]
   def or(phi2 : Formula[T]) = Or(this, phi2)
   def and(phi2 : Formula[T]) = And(this, phi2)
   def ==>(phi2 : Formula[T]) = Implies(this, phi2)
+  
   // temporal builder methods: next, eventually and always are methods of the Formula companion object
-  def until(phi2 : Formula[T]) = new TimeoutMissingFormula[T](Until(this, phi2, _))
-  def release(phi2 : Formula[T]) = new TimeoutMissingFormula[T](Release(this, phi2, _))
+  import Formula._
+  def until(phi2 : Formula[T]): TimeoutMissingFormula[T] = new TimeoutMissingFormula[T](Until(this, phi2, _))
+  /** Applies until to a now built with assertion
+   * */
+  def until(assertion : T => Formula[T]): TimeoutMissingFormula[T] = this.untilF(assertion)
+  /** Applies until to a now built with assertion
+   * */
+  def untilR(assertion : T => Result): TimeoutMissingFormula[T] = this.until(now(assertion))
+  /** Applies until to a now built with assertion
+   * */
+  def untilS(assertion : T => Prop.Status): TimeoutMissingFormula[T] = this.until(nowS(assertion))
+  /** Applies until to a now built with assertion
+   * */
+  def untilF(assertion : T => Formula[T]): TimeoutMissingFormula[T] = this.until(nowF(assertion))
+
+  def release(phi2 : Formula[T]): TimeoutMissingFormula[T] = new TimeoutMissingFormula[T](Release(this, phi2, _))
+  /** Applies release to a now built with assertion
+   * */
+  def release(assertion : T => Formula[T]): TimeoutMissingFormula[T] = this.releaseF(assertion)
+  /** Applies release to a now built with assertion
+   * */
+  def releaseR(assertion : T => Result): TimeoutMissingFormula[T] = this.release(now(assertion))
+  /** Applies release to a now built with assertion
+   * */
+  def releaseS(assertion : T => Prop.Status): TimeoutMissingFormula[T] = this.release(nowS(assertion))
+  /** Applies release to a now built with assertion
+   * */
+  def releaseF(assertion : T => Formula[T]): TimeoutMissingFormula[T] = this.release(nowF(assertion))
 }
 
 /** Restricted class of formulas that are in a form suitable for the 
@@ -348,29 +240,23 @@ sealed trait NextFormula[T]
    * */
   def result : Option[Prop.Status] 
   
-//  /** @return a new formula resulting from progressing in the evaluation 
-//   *  of this formula by consuming the new values atoms for the atomic 
-//   *  propositions corresponding to the values of the element of the universe
-//   *  at a new instant of time. This corresponds to the notion of "letter simplification" 
-//   *  in the paper
-//   */
-//  def consume(atoms: T): NextFormula[T]
-//  /** same meaning as consume(atoms), but it also takes the Time object corresponding 
-//   *  to the instant where atoms is generated. The default implementation ignores time
-//   *  returning this.consume(atoms)
-//   * */
-   /** @return a new formula resulting from progressing in the evaluation 
+  /** @return a new formula resulting from progressing in the evaluation 
    *  of this formula by consuming the new values atoms for the atomic 
    *  propositions corresponding to the values of the element of the universe
-   *  at a new instant of time. This corresponds to the notion of "letter simplification" 
+   *  at a new instant of time time. This corresponds to the notion of "letter simplification" 
    *  in the paper
    */
   def consume(time: Time)(atoms: T): NextFormula[T]
-   // =  this.consume(atoms) This default leads to using null, better add default in builder methods!
 }
 
 /** Resolved formulas
  * */
+object Solved {
+  def apply[T](result: Result) = ofResult[T](result)
+  // these are needed to resolve ambiguities with apply
+  def ofResult[T](result: Result): Solved[T] = new Solved[T](Formula.resultToPropStatus(result))
+  def ofStatus[T](status : Prop.Status): Solved[T] = Solved(status) 
+}
 // see https://github.com/rickynils/scalacheck/blob/1.12.2/src/main/scala/org/scalacheck/Prop.scala
 case class Solved[T](status : Prop.Status) extends NextFormula[T] {
   override def safeWordLength = Timeout(0)
@@ -379,13 +265,7 @@ case class Solved[T](status : Prop.Status) extends NextFormula[T] {
   // do no raise an exception in call to consume, because with NextOr we will
   // keep undecided prop values until the rest of the formula in unraveled
   override def consume(time: Time)(atoms : T) = this
-} // FIXME move up or change criteria for all classes
-object Solved {
-  def apply[T](result: Result) = ofResult[T](result)
-  // these are needed to resolve ambiguities with apply
-  def ofResult[T](result: Result): Solved[T] = new Solved[T](Formula.resultToPropStatus(result))
-  def ofStatus[T](status : Prop.Status): Solved[T] = Solved(status) 
-}
+} 
 
 /** Formulas that have to be resolved now, which correspond to atomic proposition
  *  as functions from the current state of the system to Specs2 assertions. 
@@ -428,7 +308,6 @@ case class Now[T](timedAtomsConsumer: Time => T => Formula[T])
   override def safeWordLength = ??? // Timeout(1)
   override def nextFormula = this
   override def result = None
-  // override def consume(atoms : T) = Solved(p(atoms)) FIXME remove
   override def consume(time: Time)(atoms: T) = 
     timedAtomsConsumer(time)(atoms).nextFormula 
 }
@@ -570,13 +449,7 @@ case class Implies[T](phi1 : Formula[T], phi2 : Formula[T]) extends Formula[T] {
   override def safeWordLength = phi1.safeWordLength max phi2.safeWordLength
   override def nextFormula = NextOr(new NextNot(phi1.nextFormula), phi2.nextFormula)
 }
-object Next {
-//  /** @return a formula corresponding to n applications of 
-//   *  next on phi
-//   */
- // def apply[T](n : Int)(phi : Formula[T]) : Formula[T] = 
-   // (1 to n).foldLeft(phi) { (f, _) => new Next[T](f) }
-}
+
 case class Next[T](phi : Formula[T]) extends Formula[T] {
   import Formula.intToTimeout
   override def safeWordLength = phi.safeWordLength + 1
@@ -584,11 +457,6 @@ case class Next[T](phi : Formula[T]) extends Formula[T] {
 }
 object NextNext {
   def apply[T](phi : NextFormula[T]) : NextFormula[T] = new NextNext(phi)
-  /** @return a next formula corresponding to n applications of 
-   *  next on phi
-   */
-  def apply[T](n : Int)(phi : NextFormula[T]) : NextFormula[T] =
-    (1 to n).foldLeft(phi) { (f, _) => new NextNext(f) }
 }
 class NextNext[T](phi : NextFormula[T]) extends Next[T](phi) with NextFormula[T] {
   override def result = None
