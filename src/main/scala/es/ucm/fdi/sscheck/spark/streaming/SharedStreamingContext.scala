@@ -60,10 +60,9 @@ trait SharedStreamingContext
     _ssc.foreach { ssc =>
       logger.warn("stopping test Spark Streaming context")
       Try {
-        /* need to use stopGracefully=false for DStreamProp.forAllAlways to work
-         * ok in an spec with several props
+        /* need to use stopGracefully=false for DStreamTLProperty.forAllDStream 
+         * to work ok in an spec with several props
         */ 
-        //ssc.stop(stopSparkContext=false, stopGracefully=true)
         ssc.stop(stopSparkContext=false, stopGracefully=false) 
       } recover {
         case _ => {
