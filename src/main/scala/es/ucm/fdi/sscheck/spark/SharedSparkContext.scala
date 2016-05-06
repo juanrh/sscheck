@@ -2,7 +2,6 @@ package es.ucm.fdi.sscheck.spark
 
 import org.apache.spark._
 
-import com.typesafe.scalalogging.slf4j.Logger
 import org.slf4j.LoggerFactory
 
 /** This trait can be used to share a Spark Context. The context is created
@@ -14,7 +13,7 @@ trait SharedSparkContext
   
   // cannot use private[this] due to https://issues.scala-lang.org/browse/SI-8087
   //@transient private[this] val logger = Logger(LoggerFactory.getLogger("SharedSparkContext"))
-  @transient private val logger = Logger(LoggerFactory.getLogger("SharedSparkContext"))
+  @transient private val logger = LoggerFactory.getLogger("SharedSparkContext")
   
   /** Override for custom config
   * */
