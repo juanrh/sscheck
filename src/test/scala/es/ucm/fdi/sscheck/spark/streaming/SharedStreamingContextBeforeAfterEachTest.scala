@@ -10,7 +10,6 @@ import org.apache.spark.rdd.RDD
 import scala.collection.mutable.Queue
 import scala.concurrent.duration._
 
-import com.typesafe.scalalogging.slf4j.Logger
 import org.slf4j.LoggerFactory
 
 import es.ucm.fdi.sscheck.matcher.specs2.RDDMatchers._
@@ -25,7 +24,7 @@ class SharedStreamingContextBeforeAfterEachTest
   with SharedStreamingContextBeforeAfterEach {
   
   // cannot use private[this] due to https://issues.scala-lang.org/browse/SI-8087
-  @transient private val logger = Logger(LoggerFactory.getLogger("SharedStreamingContextBeforeAfterEachTest"))
+  @transient private val logger = LoggerFactory.getLogger("SharedStreamingContextBeforeAfterEachTest")
   
   // Spark configuration
   override def sparkMaster : String = "local[5]"
