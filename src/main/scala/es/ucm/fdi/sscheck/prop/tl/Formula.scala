@@ -86,6 +86,7 @@ object Formula {
   *  with a partial function literal
   * */
   def now[T](assertion: T => Result): Now[T] = Now(assertion)
+  def nowTime[T](assertion: (T, Time) => Result): Now[T] = Now(assertion)
 
   /** Build a Now formula of type T, useful for defining a type context to define assertion
    *  with a partial function literal
@@ -93,11 +94,13 @@ object Formula {
   // could use the implicits converstions to Now here and elsewhere, but I think being
   // explicit is more clear 
   def nowS[T](assertion: T => Prop.Status): Now[T] = statusFunToNow(assertion)
+  def nowTimeS[T](assertion: (T, Time) => Prop.Status): Now[T] = Now.fromStatusTimeFun(assertion)
   
   /** Build a Now formula of type T, useful for defining a type context to define assertion
    *  with a partial function literal
    * */
   def nowF[T](assertion: T => Formula[T]): Now[T] = atomsConsumerToNow(assertion)
+  def nowTimeF[T](assertion: (T, Time) => Formula[T]): Now[T] = Now.fromAtomsTimeConsumer(assertion)
 
   // builders for non temporal connectives: note these act as clever constructors
   // for Or and And
@@ -279,10 +282,16 @@ object Now {
    */  
   def fromAtomsConsumer[T](atomsConsumer: T => Formula[T]): Now[T] = 
     new Now[T](Function.const(atomsConsumer))
-  def fromStatusFun[T](atomsToStatus : T => Prop.Status): Now[T] =
-    new Now[T](Function.const(atomsToStatus andThen Solved.ofStatus _))  
-  def apply[T, R <% Result](atomsToResult : T => R): Now[T] =
+  def fromAtomsTimeConsumer[T](atomsTimeConsumer: (T, Time) => Formula[T]): Now[T] = 
+    new Now[T](time => atoms => atomsTimeConsumer(atoms, time))
+  def fromStatusFun[T](atomsToStatus: T => Prop.Status): Now[T] =
+    new Now[T](Function.const(atomsToStatus andThen Solved.ofStatus _))
+  def fromStatusTimeFun[T](atomsTimeToStatus: (T, Time) => Prop.Status): Now[T] =
+    new Now[T](time => atoms => Solved.ofStatus(atomsTimeToStatus(atoms, time)))
+  def apply[T, R <% Result](atomsToResult: T => R): Now[T] =
     new Now[T](Function.const(atomsToResult andThen implicitly[Function[R,Result]] andThen Solved.ofResult _))  
+  def apply[T, R <% Result](atomsTimeToResult: (T, Time) => R): Now[T] =
+    new Now[T](time => atoms => Solved.ofResult(atomsTimeToResult(atoms, time)))
 }
 
 case class Now[T](timedAtomsConsumer: Time => T => Formula[T]) 
