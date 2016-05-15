@@ -2,7 +2,6 @@ package es.ucm.fdi.sscheck.spark.streaming
 
 import org.apache.spark.streaming.{StreamingContext,Duration}
 
-import com.typesafe.scalalogging.slf4j.Logger
 import org.slf4j.LoggerFactory
 
 import scala.util.Try 
@@ -14,7 +13,7 @@ trait SharedStreamingContext
 
   // cannot use private[this] due to https://issues.scala-lang.org/browse/SI-8087
   // @transient private[this] val logger = Logger(LoggerFactory.getLogger("SharedStreamingContext"))
-  @transient private val logger = Logger(LoggerFactory.getLogger("SharedStreamingContext"))
+  @transient private val logger = LoggerFactory.getLogger("SharedStreamingContext")
   
   /** Override for custom config
   * */

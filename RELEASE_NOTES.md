@@ -1,3 +1,6 @@
+# sscheck 0.2.4
+Added cross Scala version compatibility, 2.10 and 2.11, see [#42](https://github.com/juanrh/sscheck/pull/42)
+
 # sscheck 0.2.3
 Bug fixing and code cleanup
  * Remove dependency to spark-testing-base and multisets in order to fix [#36](https://github.com/juanrh/sscheck/issues/36)

@@ -13,7 +13,6 @@ import scala.reflect.ClassTag
 import scala.concurrent.SyncVar
 import scala.util.{Try, Success, Failure}
 
-import com.typesafe.scalalogging.slf4j.Logger
 import org.slf4j.LoggerFactory
 
 import scala.util.Properties.lineSeparator
@@ -24,7 +23,7 @@ import es.ucm.fdi.sscheck.spark.streaming
 import es.ucm.fdi.sscheck.spark.streaming.TestInputStream
 
 object DStreamTLProperty {
-    @transient private val logger = Logger(LoggerFactory.getLogger("DStreamTLProperty"))
+  @transient private val logger = LoggerFactory.getLogger("DStreamTLProperty")
 }
 
 trait DStreamTLProperty 
@@ -146,7 +145,7 @@ case class TestCaseTimeoutException(msg : String)
   extends PropExecutionException(msg)
 
 object TestCaseContext {
-  @transient private val logger = Logger(LoggerFactory.getLogger("TestCaseContext"))
+  @transient private val logger = LoggerFactory.getLogger("TestCaseContext")
   
    // Constants used for printing a sample of the generated values for each batch
   val msgHeader = "-"*43
