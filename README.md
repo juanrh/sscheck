@@ -3,7 +3,17 @@ Utilities for using ScalaCheck with Spark and Spark Streaming, based on Specs2
 
 [Jenkins](https://juanrhcubox.duckdns.org:8080/)
 
-Use linear temporal logic to write ScalaCheck properties for Spark Streaming programs, see the [**Quickstart**](https://github.com/juanrh/sscheck/wiki/Quickstart) for details. 
+Use linear temporal logic to write ScalaCheck properties for Spark Streaming programs, see the [**Quickstart**](https://github.com/juanrh/sscheck/wiki/Quickstart) for details. See also
+
+ * [**scaladoc**](http://juanrh.github.io/doc/sscheck/api)
+ * sbt dependency 
+
+```scala
+lazy val sscheckVersion = "0.2.4"
+libraryDependencies += "es.ucm.fdi" %% "sscheck" % sscheckVersion
+resolvers += Resolver.bintrayRepo("juanrh", "maven")
+```
+See latest version in [bintray](https://bintray.com/juanrh/maven/sscheck/view)
 
 # Acknowledgements
 This work has been partially supported by MICINN Spanish project StrongSoft (TIN2012-39391-C04-04), by the
