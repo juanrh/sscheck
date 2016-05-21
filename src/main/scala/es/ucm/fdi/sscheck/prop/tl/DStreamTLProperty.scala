@@ -16,6 +16,7 @@ import scala.util.{Try, Success, Failure}
 import org.slf4j.LoggerFactory
 
 import scala.util.Properties.lineSeparator
+import scala.language.implicitConversions
 
 import es.ucm.fdi.sscheck.{TestCaseIdCounter,TestCaseId}
 import es.ucm.fdi.sscheck.spark.{SharedSparkContextBeforeAfterAll,Parallelism}
@@ -24,12 +25,15 @@ import es.ucm.fdi.sscheck.spark.streaming.TestInputStream
 
 object DStreamTLProperty {
   @transient private val logger = LoggerFactory.getLogger("DStreamTLProperty")
+  
+  type SSeq[A] = Seq[Seq[A]]
+  type SSGen[A] = Gen[SSeq[A]]
 }
 
 trait DStreamTLProperty 
   extends SharedSparkContextBeforeAfterAll {
   
-  import DStreamTLProperty.{logger}
+  import DStreamTLProperty.{logger,SSeq,SSGen}
   
   /** Override for custom configuration
   * */
@@ -57,6 +61,155 @@ trait DStreamTLProperty
       }
     newSsc
   }
+  
+  // TODO: revise access level for all methods in this class
+  // TODO: less options
+  private def forAllDStream22Option[I1:ClassTag,I2:ClassTag,
+                             O1:ClassTag,O2:ClassTag,
+                             U](
+    g1: Option[SSGen[I1]], g2: Option[SSGen[I2]])(
+    gt1: Option[(DStream[I1], DStream[I2]) => DStream[O1]],
+    gt2: Option[(DStream[I1], DStream[I2]) => DStream[O2]])(
+    //formula: Formula[(RDD[I1], Option[RDD[I2]], RDD[O1], Option[RDD[O2]])])(
+    formula: Formula[U])(
+    implicit pp1: SSeq[I1] => Pretty, pp2: SSeq[I2] => Pretty, 
+     atomsAdapter: (Option[RDD[I1]], Option[RDD[I2]], Option[RDD[O1]], Option[RDD[O2]]) => U
+    ): Prop = {
+     
+    def genOptToDStreamOp[I:ClassTag](g: Option[SSGen[I]]): Option[DStream[I]] = 
+      g.map { gen =>
+        val batches = List(gen.sample.get, gen.sample.get)
+        new TestInputStream(???, ???, gen.sample.get, 2)
+      }
+    val (dsIn1, dsIn2) = (genOptToDStreamOp(g1), genOptToDStreamOp(g2))
+    /* HERE FIXME: cannot use gt1 so that it fails when g1 or g2 leads to dsIn1 or dsIn2 
+     * being none, as for example forAllDStream11Option ignores the second argument. 
+     * An easy option is making the DStreams also an Option, i.e.  
+     * gt1: Option[(Option[DStream[I1]], Option[DStream[I2]]) => DStream[O1]]
+     * 
+    */
+    val gt1fix: Option[(Option[DStream[I1]], Option[DStream[I2]]) => DStream[O1]] = ???
+    val dsOut2 = gt1fix.map(_.apply(dsIn1, dsIn2))
+    
+    // probably HList here could be useful to get the not absent dsi, for a generalization to more dstreams
+    dsIn1.get.foreachRDD { (inBatch1, time) =>
+      val inBatch2: RDD[I2] = ??? // with slice, as there is no foreachRDDWith
+      
+    }
+    
+    type UWrapper = (Option[RDD[I1]], Option[RDD[I2]], Option[RDD[O1]], Option[RDD[O2]])
+    val ats: UWrapper = ???
+    val atsAdapted = atomsAdapter.tupled(ats) 
+    formula.nextFormula.consume(???)(atsAdapted)
+    /*
+Multiple markers at this line:
+◾type mismatch; found : ats.type (with underlying type UWrapper) required: U
+◾type mismatch; found : ats.type (with underlying type (Option[org.apache.spark.rdd.RDD[I1]], Option[org.apache.spark.rdd.RDD[Unit]], Option[org.apache.spark.rdd.RDD[O1]], Option[org.apache.spark.rdd.RDD[Unit]])) required: U
+
+     * */
+   
+    // TODO move a Gen utils
+    def optGenToGenOpt[A](gen: Option[Gen[A]]): Gen[Option[A]] = 
+      gen.map(_.map(Some(_))).getOrElse(Gen.const(None))
+      
+    val formulaNext = formula.nextFormula
+    // test case id counter / generator
+    val testCaseIdCounter = new TestCaseIdCounter
+    Prop.forAllNoShrink (optGenToGenOpt(g1), optGenToGenOpt(g2)) { (testCase1: Option[SSeq[I1]], testCase2: Option[SSeq[I2]]) =>
+        // Setup new test case
+      val testCaseId : TestCaseId = testCaseIdCounter.nextId() 
+      // create, start and stop context for each test case      
+        // create a fresh streaming context for this test case, and pass it unstarted to 
+        // a new TestCaseContext, which will setup the streams and actions, and start the streaming context
+      val freshSsc = buildFreshStreamingContext() 
+      // TODO this has to be generalized. Add assertions to the new version of TestCaseContext 
+      // to ensure compatibility between Option in test case and transformer. 
+      //val testCaseContext = new TestCaseContext[I1,O1](testCaseDstream, gt1, formulaNext)(freshSsc, parallelism)
+      
+      // the rest is more or less the same
+      true
+    }
+    ???
+  } 
+   
+  def forAllDStream11Option[I1:ClassTag,O1:ClassTag](
+    g1: SSGen[I1])(
+    gt1: (DStream[I1]) => DStream[O1])(
+    formula: Formula[(RDD[I1], RDD[O1])])(
+    implicit pp1: SSeq[I1] => Pretty): Prop = {
+   
+      /*
+       * How can I obtain a formula for (RDD[I1], Option[RDD[Unit]], RDD[O1], Option[RDD[Unit]])
+       * from a formula for (RDD[I1], RDD[O1])? What I really need is a formula that has None
+       * is those options. Note None is not a type but an object
+       * */
+    //implicit def optiontuple
+    
+    //val f: Formula[(RDD[I1], Option[RDD[Unit]], RDD[O1], Option[RDD[Unit]])] = ???
+    type U = (RDD[I1], RDD[O1])
+    type UWrapper = (Option[RDD[I1]], Option[RDD[Unit]], Option[RDD[O1]], Option[RDD[Unit]])
+    // U <% (Option[RDD[I1]], Option[RDD[I2]], Option[RDD[O1]], Option[RDD[O2]])(
+//    implicit def uToOptionTup4(atoms: U): UWrapper = { 
+//        val (inBatch1, outBatch1) = atoms
+//        (Some(inBatch1), None, Some(outBatch1), None)
+//     }
+    implicit def atomsAdapter(a1: Option[RDD[I1]], a2: Option[RDD[Unit]], a3: Option[RDD[O1]], a4: Option[RDD[Unit]]) : U = 
+      (a1.get, a3.get)
+    forAllDStream22Option[I1,Unit,O1,Unit, U](
+      Some(g1), None)(
+      Some((ds1, ds2) => gt1(ds1)), 
+      None)(
+      formula)
+  }
+  
+  def forAllDStream22[I1:ClassTag,I2:ClassTag,O1:ClassTag,O2:ClassTag](
+    g1: SSGen[I1], g2: SSGen[I2])(
+    gt1: (DStream[I1], DStream[I2]) => DStream[O1],
+    gt2: (DStream[I1], DStream[I2]) => DStream[O2])(
+    formula: Formula[(RDD[I1], RDD[I2], RDD[O1], RDD[O2])])(
+    implicit pp1: SSeq[I1] => Pretty, pp2: SSeq[I2] => Pretty): Prop = {
+    
+    
+    ???
+  } 
+  
+  def forAllDStream11[I1:ClassTag,O1:ClassTag](
+    g1: SSGen[I1])(
+    gt1: (DStream[I1]) => DStream[O1])(
+    formula: Formula[(RDD[I1], RDD[O1])])(
+    implicit pp1: SSeq[I1] => Pretty): Prop = {
+    
+      val g2: SSGen[Unit] = Gen.const(List(List(Unit)))
+      def gt2(ds1: DStream[I1], ds2: DStream[Unit]): DStream[Unit] = { 
+        // could generate a TestInputStream here that always returns a single Unit
+        // but that looks like a waste of resources, and will generate ugly output
+        
+        // TODO: try with forAllDStream22Option that takes options, and then see
+        // how to define forAllDStream11 with that. At least we know pretty it's
+        // not a problem now
+        
+        ???
+      }
+      
+      val f: Formula[(RDD[I1], RDD[Unit], RDD[O1], RDD[Unit])] = ???
+      //implicit val pp2: SSeq[Unit] => Pretty = ???
+      //import scala.reflect._
+      // implicit val ct = classTag[Unit]
+      
+      forAllDStream22[I1,Unit,O1,Unit](
+          g1, g2)(
+          (ds1, ds2) => gt1(ds1), 
+          gt2)(
+          f)
+          //(
+          //pp1, pp2)
+           
+          ???
+  }
+      
+      
+      
+          
     
   /** @return a ScalaCheck property that is executed by: 
    *  - generating a prefix of a DStream with g1
@@ -71,10 +224,12 @@ trait DStreamTLProperty
    *  test cases, in order to avoid having more than a single StreamingContext 
    *  started in the same JVM 
    * */
-  def forAllDStream[E1:ClassTag,E2:ClassTag]
-            (g1: Gen[Seq[Seq[E1]]])(gt1 : (DStream[E1]) => DStream[E2])
-            (formula : Formula[(RDD[E1], RDD[E2])])
-            (implicit pp1: Seq[Seq[E1]] => Pretty) : Prop = {  
+  def forAllDStream[I1:ClassTag,O1:ClassTag](
+    g1: SSGen[I1])(
+    gt1: (DStream[I1]) => DStream[O1])(
+    formula: Formula[(RDD[I1], RDD[O1])])(
+    implicit pp1: SSeq[I1] => Pretty): Prop = {
+    
     val formulaNext = formula.nextFormula
     // test case id counter / generator
     val testCaseIdCounter = new TestCaseIdCounter
@@ -82,14 +237,14 @@ trait DStreamTLProperty
     // Create a new streaming context per test case, and use it to create a new TestCaseContext
     // that will use TestInputStream from spark-testing-base to create new input and output 
     // dstreams, and register a foreachRDD action to evaluate the formula
-    Prop.forAllNoShrink (g1) { (testCaseDstream : Seq[Seq[E1]]) =>
+    Prop.forAllNoShrink (g1) { (testCaseDstream: SSeq[I1]) =>
       // Setup new test case
       val testCaseId : TestCaseId = testCaseIdCounter.nextId() 
       // create, start and stop context for each test case      
         // create a fresh streaming context for this test case, and pass it unstarted to 
         // a new TestCaseContext, which will setup the streams and actions, and start the streaming context
       val freshSsc = buildFreshStreamingContext() 
-      val testCaseContext = new TestCaseContext[E1, E2](testCaseDstream, gt1, formulaNext)(freshSsc, parallelism)
+      val testCaseContext = new TestCaseContext[I1,O1](testCaseDstream, gt1, formulaNext)(freshSsc, parallelism)
         // we use propFailed to stop in the middle of the test case as soon as a counterexample is found 
         // Note: propFailed is not equivalent to currFormula.result.isDefined, because propFailed is
         // only defined after a wait for onBatchCompleted
