@@ -24,7 +24,7 @@ import es.ucm.fdi.sscheck.gen.PDStreamGenConversions._
 import es.ucm.fdi.sscheck.matcher.specs2.RDDMatchers._
 
 @RunWith(classOf[JUnitRunner])
-class StreamingFormulaDemoQuant 
+class StreamingFormulaQuantDemo 
   extends Specification 
   with DStreamTLProperty
   with ResultMatchers
