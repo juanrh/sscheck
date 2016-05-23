@@ -16,6 +16,14 @@ import es.ucm.fdi.sscheck.prop.tl.{Formula,DStreamTLProperty}
 import es.ucm.fdi.sscheck.prop.tl.Formula._
 import es.ucm.fdi.sscheck.gen.{PDStreamGen,BatchGen}
 
+/* TODO Add at least tests
+ * - 2 inputs that join in a single output
+ * - 1 input that generates 2 different outputs
+ * - 2 inputs and their independent corresponding outputs
+ * 
+ * no need for interesting programs, write tests as simple as possible
+ * */
+
 @RunWith(classOf[JUnitRunner])
 class StreamingFormulaManyArgsDemo 
   extends Specification 
@@ -50,7 +58,7 @@ class StreamingFormulaManyArgsDemo
 
     val gen = BatchGen.always(BatchGen.ofNtoM(10, 50, arbitrary[Double]), numBatches)
     
-    forAllDStream11Option(
+    forAllDStream(
       gen)(
       testSubject)(
       formula)
