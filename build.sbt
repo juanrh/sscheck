@@ -6,7 +6,7 @@ version := "0.2.4" // "0.2.4-SNAPSHOT" //
 
 scalaVersion := "2.11.8"
 
-crossScalaVersions  := Seq("2.10.6", "2.11.8")
+crossScalaVersions := Seq("2.10.6", "2.11.8")
 
 licenses += ("Apache-2.0", url("http://www.apache.org/licenses/LICENSE-2.0"))
 
@@ -16,7 +16,7 @@ bintrayVcsUrl := Some("git@github.com:juanrh/sscheck.git")
 
 lazy val sparkVersion = "1.6.1"
 
-lazy val specs2Version = "3.6.4"
+lazy val specs2Version = "3.8.4"
 
 // Use `sbt doc` to generate scaladoc, more on chapter 14.8 of "Scala Cookbook"
 
@@ -41,9 +41,9 @@ libraryDependencies += "org.apache.spark" %% "spark-core" % sparkVersion
 libraryDependencies += "org.apache.spark" %% "spark-streaming" % sparkVersion
 
 // additional libraries: NOTE as we are writing a testing library they should also be available for main
-libraryDependencies += "org.scalatest" %% "scalatest" % "2.2.1"
+libraryDependencies += "org.scalatest" %% "scalatest" % "2.2.6"
 
-libraryDependencies += "org.scalacheck" %% "scalacheck" % "1.12.2"
+libraryDependencies += "org.scalacheck" %% "scalacheck" % "1.13.1"
 
 libraryDependencies += "org.specs2" %% "specs2-core" % specs2Version
 
