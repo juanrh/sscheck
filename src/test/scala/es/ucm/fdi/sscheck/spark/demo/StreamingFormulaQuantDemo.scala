@@ -110,7 +110,7 @@ class StreamingFormulaQuantDemo
       }) during nestedTimeout
     }) during tailTimeout      
         
-    forAllDStream(    
+    forAllDStream[(UserId, Boolean), UserId](    
       gen)(
       testSubject)( 
       badIdsAreAlwaysBanned and

@@ -77,7 +77,7 @@ class StreamingFormulaDemo2
       ( always { badInput ==> (always(badIdBanned) during nestedTimeout) } during tailTimeout )  
     }  
     
-    forAllDStream(    
+    forAllDStream[(UserId, Boolean), UserId](    
       gen)(
       testSubject)( 
       formula)

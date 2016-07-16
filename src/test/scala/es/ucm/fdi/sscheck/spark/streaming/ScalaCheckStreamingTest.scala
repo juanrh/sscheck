@@ -46,7 +46,7 @@ class ScalaCheckStreamingTest
     } 
     type U = (RDD[Int], RDD[Int])
     
-    forAllDStream(
+    forAllDStream[Int, Int](
       "inputDStream" |: dsgenSeqSeq1)(
       (inputDs : DStream[Int]) => {  
         val transformedDs = inputDs.map(_+1)
@@ -68,7 +68,7 @@ class ScalaCheckStreamingTest
   def countProp(testSubject : DStream[Double] => DStream[Long]) = {
     type U = (RDD[Double], RDD[Long])
     val numBatches = 10 
-    forAllDStream( 
+    forAllDStream[Double, Long]( 
       Gen.listOfN(numBatches,  Gen.listOfN(30, arbitrary[Double])))(
       testSubject
       )(always ((u : U) => {

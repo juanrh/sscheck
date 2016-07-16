@@ -18,6 +18,7 @@ import org.slf4j.LoggerFactory
 import scala.util.Properties.lineSeparator
 import scala.language.implicitConversions
 
+import es.ucm.fdi.sscheck.gen.UtilsGen.optGenToGenOpt
 import es.ucm.fdi.sscheck.{TestCaseIdCounter,TestCaseId}
 import es.ucm.fdi.sscheck.spark.{SharedSparkContextBeforeAfterAll,Parallelism}
 import es.ucm.fdi.sscheck.spark.streaming
@@ -25,12 +26,7 @@ import es.ucm.fdi.sscheck.spark.streaming.TestInputStream
 
 /*
 TODO: 
-
 	- revise access level for all methods in this class
-  - modify forAllDStreamOption to support up to 4 inputs and outputs, and define
-  overloads of forAllDStream for 1 to 4 input and outputs. Note we won't use all 
-  combinations of Options as if some argument gen is present then all the arguments gen
-  to the left will be too, and same for transformations 
   - solve all TODO and FIXME like the pending require in forAllDStreamOption
  */
 
@@ -82,15 +78,10 @@ trait DStreamTLProperty
     g1: SSGen[I1], g2: Option[SSGen[I2]])(
     gt1: (Option[DStream[I1]], Option[DStream[I2]]) => DStream[O1],
     gtOpt2: Option[(Option[DStream[I1]], Option[DStream[I2]]) => DStream[O2]])(
-    //formula: Formula[(RDD[I1], Option[RDD[I2]], RDD[O1], Option[RDD[O2]])])(
     formula: Formula[U])(
     implicit pp1: SSeq[I1] => Pretty, pp2: SSeq[I2] => Pretty, 
      atomsAdapter: (Option[RDD[I1]], Option[RDD[I2]], Option[RDD[O1]], Option[RDD[O2]]) => U
     ): Prop = {
-     
-    // TODO move a Gen utils
-    def optGenToGenOpt[A](gen: Option[Gen[A]]): Gen[Option[A]] = 
-      gen.map(_.map(Some(_))).getOrElse(Gen.const(None))
       
     val formulaNext = formula.nextFormula
     // test case id counter / generator
@@ -153,6 +144,7 @@ trait DStreamTLProperty
     }
   } 
    
+  // 1 in 1 out
   /** @return a ScalaCheck property that is executed by: 
    *  - generating a prefix of a DStream with g1
    *  - generating a derived DStream with gt1
@@ -176,10 +168,72 @@ trait DStreamTLProperty
     implicit def atomsAdapter(a1: Option[RDD[I1]], a2: Option[RDD[Unit]], 
                               a3: Option[RDD[O1]], a4: Option[RDD[Unit]]): U = 
       (a1.get, a3.get)
-    forAllDStreamOption[I1,Unit,O1,Unit, U](
+    forAllDStreamOption[I1,Unit,O1,Unit,U](
       g1, None)(
       (ds1, ds2) => gt1(ds1.get), 
       None)(
+      formula)
+  }
+  
+  // 1 in 2 out
+  /** 1 input - 2 outputs version of [[DStreamTLProperty.forAllDStream[I1,O1]:Prop*]].
+   * */
+  def forAllDStream[I1:ClassTag,O1:ClassTag,O2:ClassTag](
+    g1: SSGen[I1])(
+    gt1: (DStream[I1]) => DStream[O1], 
+    gt2: (DStream[I1]) => DStream[O2])(
+    formula: Formula[(RDD[I1], RDD[O1], RDD[O2])])(
+    implicit pp1: SSeq[I1] => Pretty): Prop = {
+    
+    type U = (RDD[I1], RDD[O1], RDD[O2])
+    implicit def atomsAdapter(a1: Option[RDD[I1]], a2: Option[RDD[Unit]], 
+                              a3: Option[RDD[O1]], a4: Option[RDD[O2]]): U = 
+      (a1.get, a3.get, a4.get)
+    forAllDStreamOption[I1,Unit,O1,O2,U](
+      g1, None)(
+      (ds1, ds2) => gt1(ds1.get), 
+      Some((ds1, ds2) => gt2(ds1.get)))(
+      formula)
+  }
+    
+  // 2 in 1 out
+  /** 2 inputs - 2 output version of [[DStreamTLProperty.forAllDStream[I1,O1]:Prop*]].
+   * */
+  def forAllDStream[I1:ClassTag,I2:ClassTag,O1:ClassTag](
+    g1: SSGen[I1], g2: SSGen[I2])(
+    gt1: (DStream[I1], DStream[I2]) => DStream[O1])(
+    formula: Formula[(RDD[I1], RDD[I2], RDD[O1])])(
+    implicit pp1: SSeq[I1] => Pretty, pp2: SSeq[I2] => Pretty): Prop = {
+    
+    type U = (RDD[I1], RDD[I2], RDD[O1])
+    implicit def atomsAdapter(a1: Option[RDD[I1]], a2: Option[RDD[I2]], 
+                              a3: Option[RDD[O1]], a4: Option[RDD[Unit]]): U = 
+      (a1.get, a2.get, a3.get)
+    forAllDStreamOption[I1,I2,O1,Unit,U](
+      g1, Some(g2))(
+      (ds1, ds2) => gt1(ds1.get, ds2.get), 
+      None)(
+      formula)
+  }
+
+  // 2 in 2 out
+  /** 2 inputs - 2 outputs version of [[DStreamTLProperty.forAllDStream[I1,O1]:Prop*]].
+   * */
+  def forAllDStream[I1:ClassTag,I2:ClassTag,O1:ClassTag,O2:ClassTag](
+    g1: SSGen[I1], g2: SSGen[I2])(
+    gt1: (DStream[I1], DStream[I2]) => DStream[O1],
+    gt2: (DStream[I1], DStream[I2]) => DStream[O2])(
+    formula: Formula[(RDD[I1], RDD[I2], RDD[O1], RDD[O2])])(
+    implicit pp1: SSeq[I1] => Pretty, pp2: SSeq[I2] => Pretty): Prop = {
+    
+    type U = (RDD[I1], RDD[I2], RDD[O1], RDD[O2])
+    implicit def atomsAdapter(a1: Option[RDD[I1]], a2: Option[RDD[I2]], 
+                              a3: Option[RDD[O1]], a4: Option[RDD[O2]]): U = 
+      (a1.get, a2.get, a3.get, a4.get)
+    forAllDStreamOption[I1,I2,O1,O2,U](
+      g1, Some(g2))(
+      (ds1, ds2) => gt1(ds1.get, ds2.get), 
+      Some((ds1, ds2) => gt2(ds1.get, ds2.get)))(
       formula)
   }
 }
