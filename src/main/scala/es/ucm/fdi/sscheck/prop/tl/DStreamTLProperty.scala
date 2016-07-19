@@ -294,7 +294,7 @@ class TestCaseContext[I1:ClassTag,I2:ClassTag,O1:ClassTag,O2:ClassTag, U](
    *  it is not limiting, because you need at least one input and one transformation
    *  in order to be testing something!
    */
-  // TODO add assertions on Option compatibilitys
+  // TODO add assertions on Option compatibilities
   
   import TestCaseContext.{logger,printDStream,touchDStream}
   
@@ -395,8 +395,8 @@ class TestCaseContext[I1:ClassTag,I2:ClassTag,O1:ClassTag,O2:ClassTag, U](
         case Success(_) => {}
         case Failure(_) => {
           val tcte = TestCaseTimeoutException(batchInterval= batchInterval, 
-                                           batchCompletionTimeout = batchCompletionTimeout)
-         // FIXME logger.error(tcte.getMessage) 
+                                              batchCompletionTimeout = batchCompletionTimeout)
+          logger.error(tcte.getMessage) 
           Try { ssc.stop(stopSparkContext = false, stopGracefully = false) }
           // This exception will make the test case fail, in this case the 
           // failing test case is not important as this is a performance problem, not 
@@ -411,17 +411,17 @@ class TestCaseContext[I1:ClassTag,I2:ClassTag,O1:ClassTag,O2:ClassTag, U](
   def stop() : Unit = 
     if (started) {
       Try { 
-        // FIXME logger.warn("stopping test Spark Streaming context")
-        ssc.stop(stopSparkContext = false, stopGracefully = true)
+        logger.warn("stopping test Spark Streaming context")
+        // with stopGracefully = true this gives the awful "ERROR JobScheduler: Error generating jobs for time ..."
+        ssc.stop(stopSparkContext = false, stopGracefully = false)
       } recover {
           case _ => {
-           // FIXME logger.warn("second attempt forcing stop of test Spark Streaming context")
+            logger.warn("second attempt forcing stop of test Spark Streaming context")
             ssc.stop(stopSparkContext = false, stopGracefully = false)
           }
       }
       started = false
     }
-    
 }
 
 
