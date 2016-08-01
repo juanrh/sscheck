@@ -24,12 +24,6 @@ import es.ucm.fdi.sscheck.spark.{SharedSparkContextBeforeAfterAll,Parallelism}
 import es.ucm.fdi.sscheck.spark.streaming
 import es.ucm.fdi.sscheck.spark.streaming.TestInputStream
 
-/*
-TODO: 
-	- revise access level for all methods in this class
-  - solve all TODO and FIXME like the pending require in forAllDStreamOption
- */
-
 object DStreamTLProperty {
   @transient private val logger = LoggerFactory.getLogger("DStreamTLProperty")
   
@@ -349,7 +343,7 @@ class TestCaseContext[I1:ClassTag,I2:ClassTag,O1:ClassTag,O2:ClassTag, U](
     inputDStream1.foreachRDD { (inputBatch1, time) =>
       // NOTE: batch cannot be completed until this code finishes, use
       // future if needed to avoid blocking the batch completion
-      // FIXME: consider whether this synchronization is not already 
+      // TODO: consider whether this synchronization is not already 
       // implicitly obtained by DStreamTLProperty.forAllDStream blocking until the batch is completed
       currFormulaLock.synchronized {
         if ((currFormula.result.isEmpty) && ! inputBatch1.isEmpty) {
@@ -423,5 +417,3 @@ class TestCaseContext[I1:ClassTag,I2:ClassTag,O1:ClassTag,O2:ClassTag, U](
       started = false
     }
 }
-
-
