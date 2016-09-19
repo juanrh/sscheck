@@ -4,12 +4,12 @@ import org.specs2.execute.{Result,AsResult}
 import org.specs2.scalacheck.AsResultProp
 import org.scalacheck.Prop
 
+import scala.collection.parallel.ParSeq
+
 import scalaz.syntax.std.boolean._
 import scalaz.syntax.traverse._
 import scalaz.std.list._
 import scalaz.std.option._
-
-// TODO: use GenSeq in NextAnd and NextOr to avoid reparallelization
 
 // TODO fix concurrency problems in DStreamTLProperty, see ideas in paper notes 
       
@@ -365,12 +365,16 @@ case class Or[T](phis : Formula[T]*) extends Formula[T] {
 }
 object NextOr {
   def apply[T](phis: NextFormula[T]*): NextFormula[T] = if (phis.length == 1) phis(0) else new NextOr(phis:_*)
- 
+}
+class NextOr[T](phis: ParSeq[NextFormula[T]]) extends NextBinaryOp[T](phis) {
+  def this(seqPhis: NextFormula[T]*) {
+    this(NextBinaryOp.parArgs[T](seqPhis:_*))
+  }
   /** @return the result of computing the or of s1 and s2 in 
    *  the lattice of truth values, adding Exception which always
    *  absorbs other values to signal a test evaluation error
    */
-  private def call(s1 : Prop.Status, s2 : Prop.Status) : Prop.Status = 
+  override def apply(s1: Prop.Status, s2: Prop.Status): Prop.Status = 
     (s1, s2) match {
       case (Prop.Exception(_), _) => s1
       case (_, Prop.Exception(_)) => s2
@@ -379,37 +383,11 @@ object NextOr {
       case (Prop.Undecided, Prop.False) => Prop.Undecided
       case _ => s2
     }  
+  override protected def build(phis: ParSeq[NextFormula[T]]) = 
+    new NextOr(phis)
+  override protected def isSolverStatus(status: Prop.Status) = 
+    (status == Prop.True) || (status == Prop.Proof)
 }
-class NextOr[T](phis : NextFormula[T]*) extends Or(phis:_*) with NextFormula[T] {
-  override def result = None
-  override def consume(time: Time)(atoms : T) = {
-    val (phisDefined, phisUndefined) = phis.par //view
-      .map { _.consume(time)(atoms) }
-      .partition { _.result.isDefined }            
-    val definedStatus = (! phisDefined.isEmpty) option {
-      phisDefined
-      .map { _.result.get }
-      .reduce { NextOr.call(_, _) }
-      }     
-    // short-circuit or if possible. Note an edge case when all the phis
-    // are defined after consuming the input, but we might still not have a
-    // positive (true of proof) result         
-    if (definedStatus.isDefined && definedStatus.get.isInstanceOf[Prop.Exception])
-      Solved(definedStatus.get)
-    else if ((definedStatus.isDefined && (definedStatus.get == Prop.True || definedStatus.get == Prop.Proof))
-             || phisUndefined.size == 0) {
-      Solved(definedStatus.getOrElse(Prop.Undecided))
-    } else {
-      // if definedStatus is undecided keep it in case 
-      // the rest of the or is reduced to false later on
-      val newPhis = definedStatus match {
-        case Some(Prop.Undecided) => Solved[T](Prop.Undecided) +: phisUndefined.seq //.force
-        case _ => phisUndefined.seq//.force
-      } 
-      NextOr(newPhis :_*)
-    }
-  }
-} 
 
 case class And[T](phis : Formula[T]*) extends Formula[T] {
   override def safeWordLength = 
@@ -420,11 +398,15 @@ case class And[T](phis : Formula[T]*) extends Formula[T] {
 }
 object NextAnd {
   def apply[T](phis: NextFormula[T]*): NextFormula[T] = if (phis.length == 1) phis(0) else new NextAnd(phis:_*)
-
+}
+class NextAnd[T](phis: ParSeq[NextFormula[T]]) extends NextBinaryOp[T](phis) {
+  def this(seqPhis: NextFormula[T]*) {
+    this(NextBinaryOp.parArgs[T](seqPhis:_*))
+  }  
   /** @return the result of computing the and of s1 and s2 in 
    *  the lattice of truth values
    */
-  private def call(s1 : Prop.Status, s2 : Prop.Status) : Prop.Status =
+  override def apply(s1: Prop.Status, s2: Prop.Status): Prop.Status =
     (s1, s2) match {
       case (Prop.Exception(_), _) => s1
       case (_, Prop.Exception(_)) => s2
@@ -434,41 +416,72 @@ object NextAnd {
       case (Prop.True, _) => s2
       case (Prop.Proof, _) => s2
     }
+  override protected def build(phis: ParSeq[NextFormula[T]]) = 
+    new NextAnd(phis)
+  override protected def isSolverStatus(status: Prop.Status) = 
+    status == Prop.False
 }
-/* TODO: some refactoring could be performed so NextAnd and NextOr inherit from a 
- * common base class, due to very similar definitions of consume() and even of
- * call() in their corresponding companions
- * */
-class NextAnd[T](phis : NextFormula[T]*) extends And(phis:_*) with NextFormula[T] {
+
+object NextBinaryOp {
+  def parArgs[T](seqPhis: NextFormula[T]*): ParSeq[NextFormula[T]] = {
+    // TODO could use seqPhis.par.tasksupport here 
+    // to configure parallelization details, see 
+    // http://docs.scala-lang.org/overviews/parallel-collections/configuration
+    seqPhis.par
+  } 
+}
+/** Abstract the functionality of NextAnd and NextOr, which are binary
+ *  boolean operators that apply to a collection of formulas with a reduce()
+ *  */
+abstract class NextBinaryOp[T](phis: ParSeq[NextFormula[T]]) 
+  extends Function2[Prop.Status, Prop.Status, Prop.Status] 
+  with NextFormula[T] {
+  
+  // TODO: consider replacing by getting the companion of the concrete subclass 
+  // following http://stackoverflow.com/questions/9172775/get-companion-object-of-class-by-given-generic-type-scala, a
+  // or something in the line of scala.collection.generic.GenericCompanion (used e.g. in Seq.companion()),
+  // and then calling apply to build  
+  protected def build(phis: ParSeq[NextFormula[T]]): NextFormula[T]
+  
+  /* return true if status solves this operator: e.g. Prop.True
+   * or  Prop.Proof resolve and or without evaluating anything else, 
+   * otherwise return false */
+  protected def isSolverStatus(status: Prop.Status): Boolean
+  
+  override def safeWordLength = 
+    phis.map(_.safeWordLength)
+        .toList.sequence
+        .map(_.maxBy(_.instants))
   override def result = None
   override def consume(time: Time)(atoms : T) = {
-    val (phisDefined, phisUndefined) = phis.par //.view
+    val (phisDefined, phisUndefined) = phis
       .map { _.consume(time)(atoms) }
       .partition { _.result.isDefined }     
     val definedStatus = (! phisDefined.isEmpty) option {
       phisDefined
       .map { _.result.get }
-      .reduce { NextAnd.call(_, _) }
+      .reduce { apply(_, _) }
       }  
-    // short-circuit and if possible. Note an edge case when all the phis
+    // short-circuit operator if possible. Note an edge case when all the phis
     // are defined after consuming the input, but we might still not have a
     // positive (true of proof) result
     if (definedStatus.isDefined && definedStatus.get.isInstanceOf[Prop.Exception])
       Solved(definedStatus.get)
-    else if ((definedStatus.isDefined && definedStatus.get == Prop.False) 
+    else if ((definedStatus.isDefined && isSolverStatus(definedStatus.get)) 
              || phisUndefined.size == 0) {
       Solved(definedStatus.getOrElse(Prop.Undecided))
     } else {
       // if definedStatus is undecided keep it in case 
       // the rest of the and is reduced to true later on
       val newPhis = definedStatus match {
-        case Some(Prop.Undecided) => Solved[T](Prop.Undecided) +: phisUndefined.seq //.force
-        case _ => phisUndefined.seq ///.force
+        case Some(Prop.Undecided) => Solved[T](Prop.Undecided) +: phisUndefined
+        case _ => phisUndefined
       }
-      NextAnd(newPhis :_*)
+      build(newPhis)
     }
   }
 }
+
 case class Implies[T](phi1 : Formula[T], phi2 : Formula[T]) extends Formula[T] {
   override def safeWordLength = for {
     safeLength1 <- phi1.safeWordLength
