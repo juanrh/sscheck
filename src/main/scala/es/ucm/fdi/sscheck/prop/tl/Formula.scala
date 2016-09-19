@@ -5,8 +5,9 @@ import org.specs2.scalacheck.AsResultProp
 import org.scalacheck.Prop
 
 import scalaz.syntax.std.boolean._
-
-// TODO: fix safeWordLength to Option before next release
+import scalaz.syntax.traverse._
+import scalaz.std.list._
+import scalaz.std.option._
 
 // TODO: use GenSeq in NextAnd and NextOr to avoid reparallelization
 
@@ -197,8 +198,8 @@ object Formula {
 sealed trait Formula[T] 
   extends Serializable {
   
-  def safeWordLength : Timeout
-  def nextFormula : NextFormula[T]
+  def safeWordLength: Option[Timeout]
+  def nextFormula: NextFormula[T]
   
   // non temporal builder methods
   def unary_! = Not(this)
@@ -270,7 +271,7 @@ object Solved {
 }
 // see https://github.com/rickynils/scalacheck/blob/1.12.2/src/main/scala/org/scalacheck/Prop.scala
 case class Solved[T](status : Prop.Status) extends NextFormula[T] {
-  override def safeWordLength = Timeout(0)
+  override def safeWordLength = Some(Timeout(0))
   override def result = Some(status)
   // do no raise an exception in call to consume, because with NextOr we will
   // keep undecided prop values until the rest of the formula in unraveled
@@ -317,11 +318,9 @@ case class Now[T](timedAtomsConsumer: Time => T => Formula[T])
     }
     *    
     */
-  // FIXME: probably we cannot compute this now, because it depends
-  // on each particular test case. We could modify Formula.safeWordLength
-  // to return an Option that would be Some only if all these Now are 
-  // constant formulas. This is not a very important feature anyway
-  override def safeWordLength = ??? // Timeout(1)
+  // we cannot compute this statically, because the returned
+  // formula depends on the input word
+  override def safeWordLength = None
   override def result = None
   override def consume(time: Time)(atoms: T) = 
     timedAtomsConsumer(time)(atoms).nextFormula 
@@ -357,7 +356,11 @@ class NextNot[T](phi : NextFormula[T]) extends Not[T](phi) with NextFormula[T] {
 }
 
 case class Or[T](phis : Formula[T]*) extends Formula[T] {
-  override def safeWordLength = phis.map(_.safeWordLength).maxBy(_.instants)
+  override def safeWordLength = 
+    phis.map(_.safeWordLength)
+        .toList.sequence
+        .map(_.maxBy(_.instants))
+  
   override def nextFormula = NextOr(phis.map(_.nextFormula):_*)
 }
 object NextOr {
@@ -409,7 +412,10 @@ class NextOr[T](phis : NextFormula[T]*) extends Or(phis:_*) with NextFormula[T] 
 } 
 
 case class And[T](phis : Formula[T]*) extends Formula[T] {
-  override def safeWordLength = phis.map(_.safeWordLength).maxBy(_.instants)
+  override def safeWordLength = 
+    phis.map(_.safeWordLength)
+        .toList.sequence
+        .map(_.maxBy(_.instants))
   override def nextFormula = NextAnd(phis.map(_.nextFormula):_*)
 }
 object NextAnd {
@@ -464,13 +470,17 @@ class NextAnd[T](phis : NextFormula[T]*) extends And(phis:_*) with NextFormula[T
   }
 }
 case class Implies[T](phi1 : Formula[T], phi2 : Formula[T]) extends Formula[T] {
-  override def safeWordLength = phi1.safeWordLength max phi2.safeWordLength
+  override def safeWordLength = for {
+    safeLength1 <- phi1.safeWordLength
+    safeLength2 <- phi2.safeWordLength 
+  } yield safeLength1 max safeLength2
+  
   override def nextFormula = NextOr(new NextNot(phi1.nextFormula), phi2.nextFormula)
 }
 
 case class Next[T](phi : Formula[T]) extends Formula[T] {
   import Formula.intToTimeout
-  override def safeWordLength = phi.safeWordLength + 1
+  override def safeWordLength = phi.safeWordLength.map(_ + 1)
   override def nextFormula = NextNext(phi.nextFormula)
 }
 object NextNext {
@@ -480,7 +490,7 @@ class NextNext[T](_phi: => NextFormula[T]) extends NextFormula[T] {
   import Formula.intToTimeout
 
   private lazy val phi = _phi  
-  override def safeWordLength = phi.safeWordLength + 1
+  override def safeWordLength = phi.safeWordLength.map(_ + 1)
     
   override def result = None
   override def consume(time: Time)(atoms : T) = phi
@@ -490,7 +500,7 @@ case class Eventually[T](phi : Formula[T], t : Timeout) extends Formula[T] {
   require(t.instants >=1, s"timeout must be greater or equal than 1, found ${t}")
   
   import Formula.intToTimeout
-  override def safeWordLength = phi.safeWordLength + t - 1
+  override def safeWordLength = phi.safeWordLength.map(_ + t - 1)
   
   override def nextFormula = {
     val nextPhi = phi.nextFormula
@@ -503,7 +513,7 @@ case class Always[T](phi : Formula[T], t : Timeout) extends Formula[T] {
   require(t.instants >=1, s"timeout must be greater or equal than 1, found ${t}")
   
   import Formula.intToTimeout
-  override def safeWordLength = phi.safeWordLength + t - 1
+  override def safeWordLength = phi.safeWordLength.map(_ + t - 1)
   override def nextFormula = {
     val nextPhi = phi.nextFormula
     if (t.instants <= 1) nextPhi 
@@ -515,7 +525,11 @@ case class Until[T](phi1 : Formula[T], phi2 : Formula[T], t : Timeout) extends F
   require(t.instants >=1, s"timeout must be greater or equal than 1, found ${t}")
   
   import Formula.intToTimeout
-  override def safeWordLength = phi1.safeWordLength max phi2.safeWordLength + t - 1
+  override def safeWordLength = for {
+    safeLength1 <- phi1.safeWordLength
+    safeLength2 <- phi2.safeWordLength 
+  } yield (safeLength1 max safeLength2) + t -1 
+    
   override def nextFormula = {
     val (nextPhi1, nextPhi2) = (phi1.nextFormula, phi2.nextFormula)
     if (t.instants <= 1) nextPhi2
@@ -528,7 +542,11 @@ case class Release[T](phi1 : Formula[T], phi2 : Formula[T], t : Timeout) extends
   require(t.instants >=1, s"timeout must be greater or equal than 1, found ${t}")
   
   import Formula.intToTimeout
-  override def safeWordLength = phi1.safeWordLength max phi2.safeWordLength + t - 1
+  override def safeWordLength = for {
+    safeLength1 <- phi1.safeWordLength
+    safeLength2 <- phi2.safeWordLength 
+  } yield (safeLength1 max safeLength2) + t -1
+  
   override def nextFormula = {
     val (nextPhi1, nextPhi2) = (phi1.nextFormula, phi2.nextFormula)
     if (t.instants <= 1) NextAnd(nextPhi1, nextPhi2)
