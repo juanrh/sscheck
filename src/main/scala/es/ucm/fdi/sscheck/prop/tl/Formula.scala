@@ -10,8 +10,6 @@ import scalaz.syntax.std.boolean._
 import scalaz.syntax.traverse._
 import scalaz.std.list._
 import scalaz.std.option._
-
-// TODO fix concurrency problems in DStreamTLProperty, see ideas in paper notes 
       
 import scala.annotation.tailrec
 import scala.language.{postfixOps,implicitConversions}
