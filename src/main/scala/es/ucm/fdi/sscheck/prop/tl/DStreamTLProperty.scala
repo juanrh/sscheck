@@ -9,7 +9,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.{StreamingContext, Duration}
 import scala.reflect.ClassTag
-import scala.concurrent.{SyncVar, Future, ExecutionContext}
+import scala.concurrent.{Future, ExecutionContext}
 import java.util.concurrent.Executors
 import scala.util.{Try, Success, Failure}
 
@@ -96,18 +96,28 @@ trait DStreamTLProperty
                                            gt1, gtOpt2,
                                            formulaNext, atomsAdapter)(freshSsc, parallelism)
         // we use isSolvedFormula to stop in the middle of the test case as soon as a counterexample is found 
-      var isSolvedFormula = false
-      val maxTestCaseLength = List(testCase1.length, testCaseOpt2.map{_.length}.getOrElse(0)).max
+//      var isSolvedFormula = false
+//      val maxTestCaseLength = List(testCase1.length, testCaseOpt2.map{_.length}.getOrElse(0)).max
       logger.warn(s"starting test case $testCaseId")
       testCaseContext.init()
-      for (i <- 1 to maxTestCaseLength if (! isSolvedFormula)) {
-        // wait for batch completion
-        logger.debug(s"waiting end of batch ${i} of test case ${testCaseId} at ${Thread.currentThread()}")
-        isSolvedFormula = testCaseContext.waitForBatch()
-        logger.debug(s"awake after end of batch ${i} of test case ${testCaseId} at ${Thread.currentThread()}")         
-      }
-      // the execution of this test case is completed
-      testCaseContext.stop() // note this does nothing if it was already stopped
+//      for (i <- 1 to maxTestCaseLength if (! isSolvedFormula)) {
+//        // wait for batch completion
+//        logger.debug(s"waiting end of batch ${i} of test case ${testCaseId} at ${Thread.currentThread()}")
+//        isSolvedFormula = testCaseContext.waitForBatch()
+//        logger.debug(s"awake after end of batch ${i} of test case ${testCaseId} at ${Thread.currentThread()}")         
+//      }
+//      // the execution of this test case is completed
+//      testCaseContext.stop() // note this does nothing if it was already stopped
+      
+      // FIXME clear 
+      /*
+       * We have to ensure we block until the StreamingContext is stopped before creating a new StreamingContext 
+       * for the next test case, otherwise we get "java.lang.IllegalStateException: Only one StreamingContext may 
+       * be started in this JVM" (see SPARK-2243)  
+       * */
+      testCaseContext.waitForSolvedFormula()
+      // FIXME investigate why is that needed for undecided
+      //testCaseContext.stop() // note this does nothing if it was already stopped
      
       // using Prop.Undecided allows us to return undecided if the test case is not
       // long enough (i.e. it is a word with not enough letters) to get a conclusive 
@@ -273,7 +283,9 @@ class TestCaseContext[I1:ClassTag,I2:ClassTag,O1:ClassTag,O2:ClassTag, U](
   gtOpt2: Option[(Option[DStream[I1]], Option[DStream[I2]]) => DStream[O2]],
   @transient private val formulaNext: NextFormula[U], 
   @transient private val atomsAdapter: (Option[RDD[I1]], Option[RDD[I2]], Option[RDD[O1]], Option[RDD[O2]]) => U)
-  (@transient private val ssc : StreamingContext, @transient private val parallelism : Parallelism) 
+  (@transient private val ssc : StreamingContext, 
+   @transient private val parallelism : Parallelism, 
+   @transient private val maxNumberBatches: Int = 100) 
   extends Serializable {
   /*
    *  With the constructor types we enforce having at least a non empty test case and a 
@@ -288,6 +300,7 @@ class TestCaseContext[I1:ClassTag,I2:ClassTag,O1:ClassTag,O2:ClassTag, U](
   /** Current value of the formula we are evaluating in this test case contexts 
    */
   @transient @volatile var currFormula: NextFormula[U] = formulaNext 
+  @transient @volatile private var numRemaningBatches: Int = List(testCase1.length, testCaseOpt2.map{_.length}.getOrElse(0)).max
   
   /** Whether the streaming context has started or not
    * */
@@ -302,8 +315,7 @@ class TestCaseContext[I1:ClassTag,I2:ClassTag,O1:ClassTag,O2:ClassTag, U](
       new TestInputStream[I1](ssc.sparkContext, ssc, testCase1, parallelism.numSlices)
   // won't wait for each batch for more than batchCompletionTimeout milliseconds
   @transient private val batchInterval = inputDStream1.slideDuration.milliseconds
-  @transient private val batchCompletionTimeout = batchInterval * 1000 // give a good margin, values like 5 lead to spurious errors
-  @transient private val onBatchCompletedSyncVar = new SyncVar[Boolean]
+  // FIXME delete @transient private val batchCompletionTimeout = batchInterval * 1000 // give a good margin, values like 5 lead to spurious errors
       
   def init(): Unit = {
     // -----------------------------------
@@ -328,33 +340,37 @@ class TestCaseContext[I1:ClassTag,I2:ClassTag,O1:ClassTag,O2:ClassTag, U](
     // - only foreachRDD writes to currFormula
     // - DStreamTLProperty.forAllDStreamOption reads currFormula
     // thus using "the cheap read-write lock trick" https://www.ibm.com/developerworks/java/library/j-jtp06197/
-    val currFormulaLock = new Serializable{}
+    val testCaseStateLock = new Serializable{}
     inputDStream1.foreachRDD { (inputBatch1, time) =>
       // NOTE: batch cannot be completed until this code finishes, use
       // future if needed to avoid blocking the batch completion
-      currFormulaLock.synchronized {
+      testCaseStateLock.synchronized {
         if ((currFormula.result.isEmpty) && ! inputBatch1.isEmpty) {
-          /* Note new TestCaseContext with its own currFormula initialized to formulaNext 
+          /* Note a new TestCaseContext with its own currFormula initialized to formulaNext 
            * is created for each test case, but for each TestCaseContext currFormula 
            * only gets to solved state once. 
        	   * */
-          val inputBatchOpt1 = Some(inputBatch1)
-          val inputBatchOpt2 = inputDStreamOpt2.map(_.slice(time, time).head)
-          val outputBatchOpt1 = Some(transformedStream1.slice(time, time).head)
-          val outputBatchOpt2 = transformedStreamOpt2.map(_.slice(time, time).head)
-          val adaptedAtoms = atomsAdapter(inputBatchOpt1, inputBatchOpt2, outputBatchOpt1, outputBatchOpt2)
-          currFormula = currFormula.consume(Time(time.milliseconds))(adaptedAtoms)
-          
-          val isSolvedFormula = currFormula.result.isDefined
-          Future {
-            onBatchCompletedSyncVar.put(isSolvedFormula) 
-            /* This would be a nice option but leads to "java.lang.IllegalStateException: Only one StreamingContext 
-             may be started in this JVM" (see SPARK-2243) when a new StreamingContext is started by DStreamTLProperty.forAllDStreamOption
-             so we have to call stop from DStreamTLProperty.forAllDStreamOption and block until the StreamingContext is
-             stopped before creating a new StreamingContext for the next test case
-            // if (isSolvedFormula) this.stop()
-             */
+          Try {
+            val inputBatchOpt1 = Some(inputBatch1)
+            val inputBatchOpt2 = inputDStreamOpt2.map(_.slice(time, time).head)
+            val outputBatchOpt1 = Some(transformedStream1.slice(time, time).head)
+            val outputBatchOpt2 = transformedStreamOpt2.map(_.slice(time, time).head)
+            val adaptedAtoms = atomsAdapter(inputBatchOpt1, inputBatchOpt2, outputBatchOpt1, outputBatchOpt2)
+            currFormula = currFormula.consume(Time(time.milliseconds))(adaptedAtoms)
+            numRemaningBatches = numRemaningBatches - 1
+          } recover { case t =>
+            // if there was some problem solving the assertions 
+            // then we solve the formula with an exception 
+            currFormula = Solved(Prop.Exception(t))
           }
+          if (currFormula.result.isDefined || numRemaningBatches <= 0) { 
+            Future { this.stop() } 
+          }
+//          val isSolvedFormula = currFormula.result.isDefined
+//          Future {
+//            // this is the only way the test case context is stopped
+//            if (isSolvedFormula) this.stop() 
+//          }
         }
       }
     }
@@ -365,7 +381,10 @@ class TestCaseContext[I1:ClassTag,I2:ClassTag,O1:ClassTag,O2:ClassTag, U](
     started = true
   }
 
-  /** Blocks the caller until the next batch for the DStreams associated 
+  /** Blocks the caller until this test case context execution completes.
+   *  The test case stops itself as soon as the formula is resolved, 
+   *  in order to fail fast in the first micro-batch that finds a counterexample
+   *   the next batch for the DStreams associated 
    *  to this object is completed. This way we can fail faster if a single
    *  batch is too slow, instead of waiting for a long time for the whole
    *  streaming context with ssc.awaitTerminationOrTimeout()
@@ -373,32 +392,52 @@ class TestCaseContext[I1:ClassTag,I2:ClassTag,O1:ClassTag,O2:ClassTag, U](
    *  @return true iff the formula for this test case context is resolved, 
    *  otherwise return false
    */
-  def waitForBatch(): Boolean = {
-    Try {
-      onBatchCompletedSyncVar.take(batchCompletionTimeout)
-    } match {
-        case Success(isSolvedFormula) => isSolvedFormula
-        case Failure(_) => {
-          val tcte = TestCaseTimeoutException(batchInterval = batchInterval, 
-                                              batchCompletionTimeout = batchCompletionTimeout)
-          logger.error(tcte.getMessage) 
-          Try { ssc.stop(stopSparkContext = false, stopGracefully = false) }
-          // This exception will make the test case fail, in this case the 
-          // failing test case is not important as this is a performance problem, not 
-          // a counterexample that has been found
-          throw tcte
-          true
-        }
-      }    
+  def waitForSolvedFormula(): Unit = {
+    this.ssc.awaitTerminationOrTimeout(batchInterval * maxNumberBatches)
   }
+
+//  FIXME delete
+//  /** Blocks the caller until the next batch for the DStreams associated 
+//   *  to this object is completed. This way we can fail faster if a single
+//   *  batch is too slow, instead of waiting for a long time for the whole
+//   *  streaming context with ssc.awaitTerminationOrTimeout()
+//   *  
+//   *  @return true iff the formula for this test case context is resolved, 
+//   *  otherwise return false
+//   */
+//  def waitForBatch(): Boolean = {
+//    Try {
+//      onBatchCompletedSyncVar.take(batchCompletionTimeout)
+//    } match {
+//        case Success(isSolvedFormula) => isSolvedFormula
+//        case Failure(_) => {
+//          val tcte = TestCaseTimeoutException(batchInterval = batchInterval, 
+//                                              batchCompletionTimeout = batchCompletionTimeout)
+//          logger.error(tcte.getMessage) 
+//          Try { ssc.stop(stopSparkContext = false, stopGracefully = false) }
+//          // This exception will make the test case fail, in this case the 
+//          // failing test case is not important as this is a performance problem, not 
+//          // a counterexample that has been found
+//          throw tcte
+//          true
+//        }
+//      }    
+//  }
     
+  def fixmeStop(): Unit = {
+    (0 to 2) foreach {_ => 
+      Try { stop() }
+    } 
+  }
+  
   /** Stops the internal streaming context, if it is running  
    */
-  def stop() : Unit = 
+  def stop() : Unit = this.synchronized {
     if (started) {
       Try { 
-        logger.warn("stopping test Spark Streaming context")
+        logger.warn("stopping test Spark Streaming context") 
         // with stopGracefully = true this gives the awful "ERROR JobScheduler: Error generating jobs for time ..."
+        // or even IllegalStateException due to more than 1 StreamingContext running in the same JVM
         ssc.stop(stopSparkContext = false, stopGracefully = false)
       } recover {
           case _ => {
@@ -408,4 +447,5 @@ class TestCaseContext[I1:ClassTag,I2:ClassTag,O1:ClassTag,O2:ClassTag, U](
       }
       started = false
     }
+  }
 }
