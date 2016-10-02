@@ -64,68 +64,6 @@ trait DStreamTLProperty
       }
     newSsc
   }
-  
-  // TODO: add scaladoc
-  private def forAllDStreamOption[I1:ClassTag,I2:ClassTag,
-                             O1:ClassTag,O2:ClassTag,
-                             U](
-    g1: SSGen[I1], g2: Option[SSGen[I2]])(
-    gt1: (Option[DStream[I1]], Option[DStream[I2]]) => DStream[O1],
-    gtOpt2: Option[(Option[DStream[I1]], Option[DStream[I2]]) => DStream[O2]])(
-    formula: Formula[U])(
-    implicit pp1: SSeq[I1] => Pretty, pp2: SSeq[I2] => Pretty, 
-     atomsAdapter: (Option[RDD[I1]], Option[RDD[I2]], Option[RDD[O1]], Option[RDD[O2]]) => U
-    ): Prop = {
-      
-    val formulaNext = formula.nextFormula
-    // test case id counter / generator
-    val testCaseIdCounter = new TestCaseIdCounter
-    
-    // Create a new streaming context per test case, and use it to create a new TestCaseContext
-    // that will use TestInputStream from spark-testing-base to create new input and output 
-    // dstreams, and register a foreachRDD action to evaluate the formula
-    Prop.forAllNoShrink (g1, optGenToGenOpt(g2)) { (testCase1: SSeq[I1], testCaseOpt2: Option[SSeq[I2]]) =>
-      // Setup new test case
-      val testCaseId : TestCaseId = testCaseIdCounter.nextId() 
-      // create, start and stop context for each test case      
-        // create a fresh streaming context for this test case, and pass it unstarted to 
-        // a new TestCaseContext, which will setup the streams and actions, and start the streaming context
-      val freshSsc = buildFreshStreamingContext() 
-      val testCaseContext = 
-        new TestCaseContext[I1,I2,O1,O2,U](testCase1, testCaseOpt2, 
-                                           gt1, gtOpt2,
-                                           formulaNext, atomsAdapter)(freshSsc, parallelism)
-      logger.warn(s"starting test case $testCaseId")
-      testCaseContext.init()
-      /*
-       * We have to ensure we block until the StreamingContext is stopped before creating a new StreamingContext 
-       * for the next test case, otherwise we get "java.lang.IllegalStateException: Only one StreamingContext may 
-       * be started in this JVM" (see SPARK-2243)  
-       * */
-      testCaseContext.waitForSolvedFormula()
-      // In case there was a timeout waiting for test execution, again too avoid more than one StreamingContext  
-      // note this does nothing if it was already stopped
-      testCaseContext.stop() 
-     
-      // using Prop.Undecided allows us to return undecided if the test case is not
-      // long enough (i.e. it is a word with not enough letters) to get a conclusive 
-      // formula evaluation
-      val testCaseResult = testCaseContext.currFormula.result.getOrElse(Prop.Undecided)  
-      
-      // Note: ScalaCheck will show the correct test case that caused the counterexample
-      // because only the test case that generated that counterexample will fail. Anyway we could
-      // use testCaseResult.mapMessage here to add testCaseDstream to the message of 
-      // testCaseResult if we needed it
-      logger.warn(s"finished test case $testCaseId with result $testCaseResult")
-      testCaseResult match {
-        case Prop.True => Prop.passed
-        case Prop.Proof => Prop.proved
-        case Prop.False => Prop.falsified
-        case Prop.Undecided => Prop.passed //Prop.undecided FIXME make configurable
-        case Prop.Exception(e) => Prop.exception(e)
-      }
-    }
-  } 
    
   // 1 in 1 out
   /** @return a ScalaCheck property that is executed by: 
@@ -219,6 +157,68 @@ trait DStreamTLProperty
       Some((ds1, ds2) => gt2(ds1.get, ds2.get)))(
       formula)
   }
+  
+  // TODO: add scaladoc
+  private def forAllDStreamOption[I1:ClassTag,I2:ClassTag,
+                             O1:ClassTag,O2:ClassTag,
+                             U](
+    g1: SSGen[I1], g2: Option[SSGen[I2]])(
+    gt1: (Option[DStream[I1]], Option[DStream[I2]]) => DStream[O1],
+    gtOpt2: Option[(Option[DStream[I1]], Option[DStream[I2]]) => DStream[O2]])(
+    formula: Formula[U])(
+    implicit pp1: SSeq[I1] => Pretty, pp2: SSeq[I2] => Pretty, 
+     atomsAdapter: (Option[RDD[I1]], Option[RDD[I2]], Option[RDD[O1]], Option[RDD[O2]]) => U
+    ): Prop = {
+      
+    val formulaNext = formula.nextFormula
+    // test case id counter / generator
+    val testCaseIdCounter = new TestCaseIdCounter
+    
+    // Create a new streaming context per test case, and use it to create a new TestCaseContext
+    // that will use TestInputStream from spark-testing-base to create new input and output 
+    // dstreams, and register a foreachRDD action to evaluate the formula
+    Prop.forAllNoShrink (g1, optGenToGenOpt(g2)) { (testCase1: SSeq[I1], testCaseOpt2: Option[SSeq[I2]]) =>
+      // Setup new test case
+      val testCaseId : TestCaseId = testCaseIdCounter.nextId() 
+      // create, start and stop context for each test case      
+        // create a fresh streaming context for this test case, and pass it unstarted to 
+        // a new TestCaseContext, which will setup the streams and actions, and start the streaming context
+      val freshSsc = buildFreshStreamingContext() 
+      val testCaseContext = 
+        new TestCaseContext[I1,I2,O1,O2,U](testCase1, testCaseOpt2, 
+                                           gt1, gtOpt2,
+                                           formulaNext, atomsAdapter)(freshSsc, parallelism)
+      logger.warn(s"starting test case $testCaseId")
+      testCaseContext.init()
+      /*
+       * We have to ensure we block until the StreamingContext is stopped before creating a new StreamingContext 
+       * for the next test case, otherwise we get "java.lang.IllegalStateException: Only one StreamingContext may 
+       * be started in this JVM" (see SPARK-2243)  
+       * */
+      testCaseContext.waitForSolvedFormula()
+      // In case there was a timeout waiting for test execution, again too avoid more than one StreamingContext  
+      // note this does nothing if it was already stopped
+      testCaseContext.stop() 
+     
+      // using Prop.Undecided allows us to return undecided if the test case is not
+      // long enough (i.e. it is a word with not enough letters) to get a conclusive 
+      // formula evaluation
+      val testCaseResult = testCaseContext.currFormula.result.getOrElse(Prop.Undecided)  
+      
+      // Note: ScalaCheck will show the correct test case that caused the counterexample
+      // because only the test case that generated that counterexample will fail. Anyway we could
+      // use testCaseResult.mapMessage here to add testCaseDstream to the message of 
+      // testCaseResult if we needed it
+      logger.warn(s"finished test case $testCaseId with result $testCaseResult")
+      testCaseResult match {
+        case Prop.True => Prop.passed
+        case Prop.Proof => Prop.proved
+        case Prop.False => Prop.falsified
+        case Prop.Undecided => Prop.passed //Prop.undecided FIXME make configurable
+        case Prop.Exception(e) => Prop.exception(e)
+      }
+    }
+  } 
 }
 
 class PropExecutionException(msg : String)
@@ -254,7 +254,8 @@ ${rdd.take(numSampleRecords).mkString(lineSeparator)}
    */
   private def touchDStream[A](dstream: DStream[A]): Unit = 
     dstream.foreachRDD {rdd => {}}
-  
+  // one for all test cases because we are limited to one test case per JVM
+  // due to the 1 streaming context per JVM limitation of SPARK-2243
   implicit val ec = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(1))
 }
 /** 
@@ -288,20 +289,19 @@ class TestCaseContext[I1:ClassTag,I2:ClassTag,O1:ClassTag,O2:ClassTag, U](
   /** Current value of the formula we are evaluating in this test case contexts 
    */
   @transient @volatile var currFormula: NextFormula[U] = formulaNext 
-  @transient @volatile private var numRemaningBatches: Int = List(testCase1.length, testCaseOpt2.map{_.length}.getOrElse(0)).max
+  // Number of batches in the test case that are waiting to be executed
+  @transient @volatile private var numRemaningBatches: Int = 
+    (testCase1.length) max (testCaseOpt2.fold(0){_.length})
   
   /** Whether the streaming context has started or not
    * */
   private var started = false
   
-  /* Synchronization stuff to wait for batch completion and communicate whether 
-   * the formula is solved or not
-   */
   // have to create this here instead of in init() because otherwise I don't know how
   // to access the batch interval of the streaming context
   @transient private val inputDStream1 = 
       new TestInputStream[I1](ssc.sparkContext, ssc, testCase1, parallelism.numSlices)
-  // won't wait for each batch for more than batchCompletionTimeout milliseconds
+  // batch interval of the streaming context
   @transient private val batchInterval = inputDStream1.slideDuration.milliseconds
       
   def init(): Unit = {
@@ -331,27 +331,29 @@ class TestCaseContext[I1:ClassTag,I2:ClassTag,O1:ClassTag,O2:ClassTag, U](
     inputDStream1.foreachRDD { (inputBatch1, time) =>
       // NOTE: batch cannot be completed until this code finishes, use
       // future if needed to avoid blocking the batch completion
-      testCaseStateLock.synchronized {
-        if ((currFormula.result.isEmpty) && ! inputBatch1.isEmpty) {
-          /* Note a new TestCaseContext with its own currFormula initialized to formulaNext 
-           * is created for each test case, but for each TestCaseContext currFormula 
-           * only gets to solved state once. 
-       	   * */
-          Try {
-            val inputBatchOpt1 = Some(inputBatch1)
-            val inputBatchOpt2 = inputDStreamOpt2.map(_.slice(time, time).head)
-            val outputBatchOpt1 = Some(transformedStream1.slice(time, time).head)
-            val outputBatchOpt2 = transformedStreamOpt2.map(_.slice(time, time).head)
-            val adaptedAtoms = atomsAdapter(inputBatchOpt1, inputBatchOpt2, outputBatchOpt1, outputBatchOpt2)
-            currFormula = currFormula.consume(Time(time.milliseconds))(adaptedAtoms)
-            numRemaningBatches = numRemaningBatches - 1
-          } recover { case t =>
-            // if there was some problem solving the assertions 
-            // then we solve the formula with an exception 
-            currFormula = Solved(Prop.Exception(t))
-          }
-          if (currFormula.result.isDefined || numRemaningBatches <= 0) { 
-            Future { this.stop() } 
+      if (! inputBatch1.isEmpty) {
+        testCaseStateLock.synchronized {
+          if ((currFormula.result.isEmpty) && (numRemaningBatches > 0)) {
+            /* Note a new TestCaseContext with its own currFormula initialized to formulaNext 
+             * is created for each test case, but for each TestCaseContext currFormula 
+             * only gets to solved state once. 
+         	   * */
+            Try {
+              val inputBatchOpt1 = Some(inputBatch1)
+              val inputBatchOpt2 = inputDStreamOpt2.map(_.slice(time, time).head)
+              val outputBatchOpt1 = Some(transformedStream1.slice(time, time).head)
+              val outputBatchOpt2 = transformedStreamOpt2.map(_.slice(time, time).head)
+              val adaptedAtoms = atomsAdapter(inputBatchOpt1, inputBatchOpt2, outputBatchOpt1, outputBatchOpt2)
+              currFormula = currFormula.consume(Time(time.milliseconds))(adaptedAtoms)
+              numRemaningBatches = numRemaningBatches - 1
+            } recover { case throwable =>
+              // if there was some problem solving the assertions 
+              // then we solve the formula with an exception 
+              currFormula = Solved(Prop.Exception(throwable))
+            }
+            if (currFormula.result.isDefined || numRemaningBatches <= 0) { 
+              Future { this.stop() } 
+            }
           }
         }
       }
@@ -377,12 +379,6 @@ class TestCaseContext[I1:ClassTag,I2:ClassTag,O1:ClassTag,O2:ClassTag, U](
   def waitForSolvedFormula(): Unit = {
     this.ssc.awaitTerminationOrTimeout(batchInterval * (maxNumberBatches*1.3).ceil.toInt)
   }
-    
-  def fixmeStop(): Unit = {
-    (0 to 2) foreach {_ => 
-      Try { stop() }
-    } 
-  }
   
   /** Stops the internal streaming context, if it is running  
    */
@@ -391,7 +387,7 @@ class TestCaseContext[I1:ClassTag,I2:ClassTag,O1:ClassTag,O2:ClassTag, U](
       Try { 
         logger.warn("stopping test Spark Streaming context") 
         ssc.stop(stopSparkContext = false, stopGracefully = true)
-        Thread.sleep(1000)
+        Thread.sleep(1000L)
         ssc.stop(stopSparkContext = false, stopGracefully = false)
       } recover {
           case _ => {
