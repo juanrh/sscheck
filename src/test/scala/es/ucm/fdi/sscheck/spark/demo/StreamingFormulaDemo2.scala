@@ -32,7 +32,7 @@ class StreamingFormulaDemo2
   
   // Spark configuration
   override def sparkMaster : String = "local[*]"
-  override def batchDuration = Duration(500) 
+  override def batchDuration = Duration(300) 
   override def defaultParallelism = 3
   override def enableCheckpointing = true
 
