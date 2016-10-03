@@ -16,6 +16,7 @@ import es.ucm.fdi.sscheck.spark.streaming.SharedStreamingContextBeforeAfterEach
 import es.ucm.fdi.sscheck.prop.tl.{Formula,DStreamTLProperty}
 import es.ucm.fdi.sscheck.prop.tl.Formula._
 import es.ucm.fdi.sscheck.gen.{PDStreamGen,BatchGen}
+import es.ucm.fdi.sscheck.matcher.specs2.RDDMatchers._
 
 import scala.math
 
@@ -28,82 +29,78 @@ class StreamingFormulaManyArgsDemo
   
   // Spark configuration
   override def sparkMaster : String = "local[*]"
-  override def batchDuration = Duration(400)
+  override def batchDuration = Duration(450)
   override def defaultParallelism = 4  
 
   def is = 
     sequential ^ s2"""Simple sample sscheck properties with more than 1 input and/or output
      - where we can have 2 inputs and 1 output defined as a combination of both 
-      inputs ${maxStreamJoinProp(dstreamsMaxOk)}
-     - where a combination of 2 with a faulty transformation ${maxStreamJoinProp(dstreamsMaxWrong) must beFailing}
+      inputs ${cartesianStreamProp(cartesianDStreamOk)}
+     - where a combination of 2 with a faulty transformation ${cartesianStreamProp(cartesianDStreamWrong) must beFailing}
      - where we can have 1 input and 2 outputs defined as a transformation of the input 
-     ${dstreamSumAndToStrProp1To2}
+     ${dstreamCartesianProp1To2}
       - where we can have 2 input and 2 outputs defined as a transformation of the inputs 
-     ${dstreamSumAndToStrProp2To2}
+     ${dstreamCartesianProp2To2}
     """
      
   val (maxBatchSize, numBatches) = (50, 10)
   def genAlwaysInts(min: Int, max: Int) = 
     BatchGen.always(BatchGen.ofNtoM(1, maxBatchSize, Gen.choose(min, max)), numBatches)
 
-  def dstreamsMaxOk(xss: DStream[Int], yss: DStream[Int]) =  
-    xss.transformWith(yss, (xs: RDD[Int], ys: RDD[Int]) => 
-      xs.context.parallelize(List(math.max(xs.max(), ys.max()))))
+  def cartesianDStreamOk(xss: DStream[Int], yss: DStream[Int]): DStream[(Int, Int)] = 
+    xss.transformWith(yss, (xs: RDD[Int], ys: RDD[Int]) => {
+     xs.cartesian(ys)
+  })
   
-  def dstreamsMaxWrong(xss: DStream[Int], yss: DStream[Int]) = xss
-       
- /* dstreamsMax is expected to be a silly transformation that returns 
-  * a DStream where each batch 
-  * has only one point that is the max the elements of both RDDs */
-  def maxStreamJoinProp(dstreamsMax: (DStream[Int], DStream[Int]) => DStream[Int]) = {
-    type U = (RDD[Int], RDD[Int], RDD[Int])
-    val (gen1, gen2) = (genAlwaysInts(1, 10), genAlwaysInts(20, 30))
+  def cartesianDStreamWrong(xss: DStream[Int], yss: DStream[Int]): DStream[(Int, Int)] =
+    xss.map{x => (x,x)}
+  
+  def cartesianStreamProp(dstreamsCartesian: (DStream[Int], DStream[Int]) => DStream[(Int, Int)]) = {
+    type U = (RDD[Int], RDD[Int], RDD[(Int, Int)])
+    val (xsMin, xsMax, ysMin, ysMax) = (1, 10, 20, 30)
     
-    val formula = alwaysR[U] { case (xss, yss, rss) => 
-      // we know this happens because yss always generates numbers 
-      // bigger than those in xss
-      (rss.max() must be_>(xss.max())) and
-      (rss.max() === yss.max())
+    val formula = alwaysR[U] { case (xs, ys, xsys) => 
+     xsys.map(_._1).subtract(xs).count === 0 and
+     xsys.map(_._2).subtract(ys).count === 0
     } during numBatches
-    forAllDStream[Int, Int, Int](
-      gen1, gen2)(
-      dstreamsMax)(
+    forAllDStream[Int, Int, (Int, Int)](
+      genAlwaysInts(1, 10), 
+      genAlwaysInts(20, 30))(
+      dstreamsCartesian)(
       formula)
   }.set(minTestsOk = 10).verbose  
   
-  def dstreamSum(xss: DStream[Int]) = 
-    xss.transform { xs => xs.context.parallelize(List(xs.reduce(_+_)))}
-  
-  def dstreamSumStr(xss: DStream[Int]) = 
-    dstreamSum(xss).map { _.toString}
-
-  def dstreamSumAndToStrProp1To2 = {
-    type U = (RDD[Int], RDD[Int], RDD[String])
-    val formula = alwaysR[U] { case (xss, sums, sumsStr) =>
-      (sums.count === 1) and (sumsStr.count === 1) and
-      (xss.reduce(_+_) === sums.take(1).head) and
-      (sumsStr.take(1).head === sums.take(1).head.toString)
+  def dstreamCartesianProp1To2 = {
+    type U = (RDD[Int], RDD[(Int, Int)], RDD[(Int, Int, Int)])
+    
+    val formula = alwaysR[U] { case (xs, pairs, triples) =>
+      pairs.map(_._1).subtract(xs).count === 0 and
+      pairs.map(_._2).subtract(xs).count === 0 and
+      triples.map(_._1).subtract(xs).count === 0 and
+      triples.map(_._2).subtract(xs).count === 0 and
+      triples.map(_._3).subtract(xs).count === 0 
     } during numBatches
-    forAllDStream[Int, Int, String](
+    forAllDStream[Int, (Int, Int), (Int, Int, Int)](
       genAlwaysInts(1, 10))(
-      dstreamSum, 
-      dstreamSumStr)(
+      _.map{x => (x,x)}, 
+      _.map{x => (x,x, x)})(
       formula)
   }.set(minTestsOk = 10).verbose 
   
-  def dstreamSumAndToStrProp2To2 = {
-    type U = (RDD[Int], RDD[Int], RDD[Int], RDD[String])
-    val formula = alwaysR[U] { case (xss, yss, maxs, sumsStr) =>
-      (maxs.count === 1) and (sumsStr.count === 1) and
-      (maxs.max() must be_>(xss.max())) and
-      (maxs.max() === yss.max()) and
-      (yss.reduce(_+_).toString === sumsStr.take(1).head)
+  def dstreamCartesianProp2To2 = {
+    type U = (RDD[Int], RDD[Int], RDD[(Int, Int)], RDD[(Int, Int)])
+    
+    val formula = alwaysR[U] { case (xs, ys, xsys, ysxs) =>
+      xsys.map(_._1).subtract(xs).count === 0 and
+      xsys.map(_._2).subtract(ys).count === 0 and
+      ysxs.map(_._1).subtract(ys).count === 0 and
+      ysxs.map(_._2).subtract(xs).count === 0 
     } during numBatches
-    forAllDStream[Int, Int, Int, String](
+    forAllDStream[Int, Int, (Int, Int), (Int, Int)](
       genAlwaysInts(1, 10), 
       genAlwaysInts(20, 30))(
-      dstreamsMaxOk, 
-      (xss, yss) => dstreamSumStr(yss))(
+      (xs, ys) => cartesianDStreamOk(xs, ys), 
+      (xs, ys) => cartesianDStreamOk(ys, xs))(
       formula)
   }.set(minTestsOk = 10).verbose 
 }
