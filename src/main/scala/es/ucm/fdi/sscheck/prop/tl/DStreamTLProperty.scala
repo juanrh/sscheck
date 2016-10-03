@@ -8,6 +8,7 @@ import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.{StreamingContext, Duration}
+import org.apache.spark.streaming.{Time => SparkTime}
 import scala.reflect.ClassTag
 import scala.concurrent.{Future, ExecutionContext}
 import java.util.concurrent.Executors
@@ -46,6 +47,17 @@ trait DStreamTLProperty
   *  Disabled by default because it is quite costly
   * */
   def enableCheckpointing : Boolean = false 
+  
+  /** Override for custom configuration
+  *  Whether the input and output RDDs for each test case should be cached 
+  *  (with RDD.cache) or not, true by default  
+  * */
+  def catchRDDs: Boolean = true
+  
+  /** Override for custom configuration
+  *  Maximum number of micro batches that the test case will wait for, 100 by default 
+  * */
+  def maxNumberBatchesPerTestCase: Int = 100
   
   /** @return a newly created streaming context, for which no DStream or action has 
    *  been defined, and that it's not started
@@ -187,7 +199,8 @@ trait DStreamTLProperty
       val testCaseContext = 
         new TestCaseContext[I1,I2,O1,O2,U](testCase1, testCaseOpt2, 
                                            gt1, gtOpt2,
-                                           formulaNext, atomsAdapter)(freshSsc, parallelism)
+                                           formulaNext, atomsAdapter)(
+                                           freshSsc, parallelism, catchRDDs, maxNumberBatchesPerTestCase)
       logger.warn(s"starting test case $testCaseId")
       testCaseContext.init()
       /*
@@ -241,14 +254,15 @@ object TestCaseContext {
 
   /** Print some elements of dstream to stdout
    */
-  private def printDStream[A](dstream: DStream[A], dstreamName: String): Unit =  
+  private def printDStream[A](dstream: DStream[A], dstreamName: String): Unit = 
     dstream.foreachRDD { (rdd, time) => 
-    println(s"""${msgHeader}
-Time: ${time} - ${dstreamName} (${rdd.count} records)
-${msgHeader}
-${rdd.take(numSampleRecords).mkString(lineSeparator)}
-...""")
-  }
+      val numRecords = rdd.count
+      println(s"""${msgHeader}
+Time: ${time} - ${dstreamName} (${numRecords} records)
+${msgHeader}""")
+      if (numRecords > 0) println(rdd.take(numSampleRecords).mkString(lineSeparator))
+      println("...")
+    }
   
   /** Launch a trivial action on dstream to force its computation
    */
@@ -273,8 +287,8 @@ class TestCaseContext[I1:ClassTag,I2:ClassTag,O1:ClassTag,O2:ClassTag, U](
   @transient private val formulaNext: NextFormula[U], 
   @transient private val atomsAdapter: (Option[RDD[I1]], Option[RDD[I2]], Option[RDD[O1]], Option[RDD[O2]]) => U)
   (@transient private val ssc : StreamingContext, 
-   @transient private val parallelism : Parallelism, 
-   @transient private val maxNumberBatches: Int = 100) 
+   @transient private val parallelism : Parallelism, @transient private val catchRDDs: Boolean, 
+   @transient private val maxNumberBatches: Int) 
   extends Serializable {
   /*
    *  With the constructor types we enforce having at least a non empty test case and a 
@@ -304,6 +318,11 @@ class TestCaseContext[I1:ClassTag,I2:ClassTag,O1:ClassTag,O2:ClassTag, U](
   // batch interval of the streaming context
   @transient private val batchInterval = inputDStream1.slideDuration.milliseconds
       
+  private def getBatchForNow[T](ds: DStream[T], time: SparkTime, catchRDD: Boolean): RDD[T] = {
+    val batch = ds.slice(time, time).head
+    if (catchRDD) batch.cache else batch
+  } 
+  
   def init(): Unit = {
     // -----------------------------------
     // create input and output DStreams
@@ -339,11 +358,11 @@ class TestCaseContext[I1:ClassTag,I2:ClassTag,O1:ClassTag,O2:ClassTag, U](
              * only gets to solved state once. 
          	   * */
             Try {
-              val inputBatchOpt1 = Some(inputBatch1)
-              val inputBatchOpt2 = inputDStreamOpt2.map(_.slice(time, time).head)
-              val outputBatchOpt1 = Some(transformedStream1.slice(time, time).head)
-              val outputBatchOpt2 = transformedStreamOpt2.map(_.slice(time, time).head)
-              val adaptedAtoms = atomsAdapter(inputBatchOpt1, inputBatchOpt2, outputBatchOpt1, outputBatchOpt2)
+              val inputBatchOpt1 = Some(if (catchRDDs) inputBatch1.cache else inputBatch1)
+              val inputBatchOpt2 = inputDStreamOpt2.map(getBatchForNow(_, time, catchRDDs))
+              val outputBatchOpt1 = Some(getBatchForNow(transformedStream1, time, catchRDDs)) 
+              val outputBatchOpt2 = transformedStreamOpt2.map(getBatchForNow(_, time, catchRDDs))
+              val adaptedAtoms = atomsAdapter(inputBatchOpt1, inputBatchOpt2, outputBatchOpt1, outputBatchOpt2)              
               currFormula = currFormula.consume(Time(time.milliseconds))(adaptedAtoms)
               numRemaningBatches = numRemaningBatches - 1
             } recover { case throwable =>
