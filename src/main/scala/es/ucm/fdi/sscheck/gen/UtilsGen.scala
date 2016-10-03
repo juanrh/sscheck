@@ -60,5 +60,5 @@ object UtilsGen {
    *  a generator that always returns None
    * */
   def optGenToGenOpt[A](gen: Option[Gen[A]]): Gen[Option[A]] = 
-      gen.map(_.map(Some(_))).getOrElse(Gen.const(None))
+    gen.fold(Gen.const[Option[A]](None)){_.map(Some(_))}  
 }
