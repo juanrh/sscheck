@@ -14,7 +14,7 @@ bintrayPackageLabels := Seq("testing")
 
 bintrayVcsUrl := Some("git@github.com:juanrh/sscheck.git")
 
-lazy val sparkVersion = "1.6.1"
+lazy val sparkVersion = "1.6.2"
 
 lazy val specs2Version = "3.8.4"
 

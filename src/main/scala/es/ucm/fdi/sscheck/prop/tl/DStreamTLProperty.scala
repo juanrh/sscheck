@@ -25,6 +25,32 @@ import es.ucm.fdi.sscheck.spark.{SharedSparkContextBeforeAfterAll,Parallelism}
 import es.ucm.fdi.sscheck.spark.streaming
 import es.ucm.fdi.sscheck.spark.streaming.TestInputStream
 
+/*
+ * TODO
+ * - see https://issues.apache.org/jira/browse/SPARK-12009 and see if update to Spark 2.0.0 fixes 
+ * 
+16/10/03 04:09:55 ERROR StreamingListenerBus: StreamingListenerBus has already stopped! Dropping event StreamingListenerBatchCompleted(BatchInfo(1475467783650 ms,Map(),1475467783676,Some(1475467795274),Some(1475467795547),Map(0 -> OutputOperationInfo(1475467783650 ms,0,foreachRDD at DStreamTLProperty.scala:258,org.apache.spark.streaming.dstream.DStream.foreachRDD(DStream.scala:668)
+es.ucm.fdi.sscheck.prop.tl.TestCaseContext$.es$ucm$fdi$sscheck$prop$tl$TestCaseContext$$printDStream(DStreamTLProperty.scala:258)
+es.ucm.fdi.sscheck.prop.tl.TestCaseContext.init(DStreamTLProperty.scala:334)
+ * 
+ * that is an error message than is thrown during the graceful stop of the streaming context, 
+ * and DStreamTLProperty.scala:258 is the foreachRDD at TestCaseContext.printDStream()
+ * 
+ * - see https://issues.apache.org/jira/browse/SPARK-14701 and see if update to Spark 2.0.0 fixes
+ * 
+java.util.concurrent.RejectedExecutionException: Task org.apache.spark.streaming.CheckpointWriter$CheckpointWriteHandler@1a08d2 rejected from java.util.concurrent.ThreadPoolExecutor@b03cb4[Terminated, pool size = 0, active threads = 0, queued tasks = 0, completed tasks = 70]
+	at java.util.concurrent.ThreadPoolExecutor$AbortPolicy.rejectedExecution(ThreadPoolExecutor.java:2047)
+	at java.util.concurrent.ThreadPoolExecutor.reject(ThreadPoolExecutor.java:823)
+	at java.util.concurrent.ThreadPoolExecutor.execute(ThreadPoolExecutor.java:1369)
+	at org.apache.spark.streaming.CheckpointWriter.write(Checkpoint.scala:278)
+	at org.apache.spark.streaming.scheduler.JobGenerator.doCheckpoint(JobGenerator.scala:295)
+	at org.apache.spark.streaming.scheduler.JobGenerator.org$apache$spark$streaming$scheduler$JobGenerator$$processEvent(JobGenerator.scala:184)
+	at org.apache.spark.streaming.scheduler.JobGenerator$$anon$1.onReceive(JobGenerator.scala:87)
+	at org.apache.spark.streaming.scheduler.JobGenerator$$anon$1.onReceive(JobGenerator.scala:86)
+	at org.apache.spark.util.EventLoop$$anon$1.run(EventLoop.scala:48)
+16/10/03 04:34:17 ERROR StreamingListenerBus: StreamingListenerBus has already stopped! Dropping event StreamingListenerBatchCompleted(BatchInfo(1475469252300 
+ * */
+
 object DStreamTLProperty {
   @transient private val logger = LoggerFactory.getLogger("DStreamTLProperty")
   
@@ -50,8 +76,15 @@ trait DStreamTLProperty
   
   /** Override for custom configuration
   *  Whether the input and output RDDs for each test case should be cached 
-  *  (with RDD.cache) or not, true by default  
-  * */
+  *  (with RDD.cache) or not, true by default
+  *  
+  *  Set to false if you get"Uncaught exception: RDDBlockId not found in driver-heartbeater", 
+  *  "java.lang.ClassNotFoundException: org.apache.spark.storage.RDDBlockId", 
+  *  "ERROR TaskSchedulerImpl: Lost executor driver on localhost: Executor heartbeat timed out" or
+  *  "ExecutorLostFailure (executor driver exited caused by one of the running tasks) Reason: Executor heartbeat timed out"
+  *  as it is a known problem https://issues.apache.org/jira/browse/SPARK-10722, that was reported
+  *  as fixed in Spark 1.6.2 in SPARK-10722  
+  */
   def catchRDDs: Boolean = true
   
   /** Override for custom configuration
@@ -256,14 +289,15 @@ object TestCaseContext {
    */
   private def printDStream[A](dstream: DStream[A], dstreamName: String): Unit = 
     dstream.foreachRDD { (rdd, time) => 
-      val numRecords = rdd.count
-      println(s"""${msgHeader}
-Time: ${time} - ${dstreamName} (${numRecords} records)
-${msgHeader}""")
-      if (numRecords > 0) println(rdd.take(numSampleRecords).mkString(lineSeparator))
-      println("...")
+      if (!rdd.isEmpty()) {
+        val numRecords = rdd.count
+        println(s"""${msgHeader}
+  Time: ${time} - ${dstreamName} (${numRecords} records)
+  ${msgHeader}""")
+        if (numRecords > 0) println(rdd.take(numSampleRecords).mkString(lineSeparator))
+        println("...")
+      }
     }
-  
   /** Launch a trivial action on dstream to force its computation
    */
   private def touchDStream[A](dstream: DStream[A]): Unit = 
@@ -318,6 +352,13 @@ class TestCaseContext[I1:ClassTag,I2:ClassTag,O1:ClassTag,O2:ClassTag, U](
   // batch interval of the streaming context
   @transient private val batchInterval = inputDStream1.slideDuration.milliseconds
       
+  /* note https://issues.apache.org/jira/browse/SPARK-10722 causes 
+   *  "Uncaught exception: RDDBlockId not found in driver-heartbeater", 
+   *  "java.lang.ClassNotFoundException: org.apache.spark.storage.RDDBlockId", 
+   *  "ERROR TaskSchedulerImpl: Lost executor driver on localhost: Executor heartbeat timed out" and
+   *  "ExecutorLostFailure (executor driver exited caused by one of the running tasks) Reason: Executor heartbeat timed out"
+   *  but that reported as fixed in v 1.6.2 in SPARK-10722  
+   */
   private def getBatchForNow[T](ds: DStream[T], time: SparkTime, catchRDD: Boolean): RDD[T] = {
     val batch = ds.slice(time, time).head
     if (catchRDD) batch.cache else batch
