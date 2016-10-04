@@ -6,6 +6,7 @@ import org.scalacheck.util.Pretty
 
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.{StreamingContext, Duration}
 import org.apache.spark.streaming.{Time => SparkTime}
@@ -361,7 +362,7 @@ class TestCaseContext[I1:ClassTag,I2:ClassTag,O1:ClassTag,O2:ClassTag, U](
    */
   private def getBatchForNow[T](ds: DStream[T], time: SparkTime, catchRDD: Boolean): RDD[T] = {
     val batch = ds.slice(time, time).head
-    if (catchRDD) batch.cache else batch
+    if (catchRDD && batch.getStorageLevel == StorageLevel.NONE) batch.cache else batch
   } 
   
   def init(): Unit = {
