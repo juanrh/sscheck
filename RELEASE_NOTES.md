@@ -1,3 +1,12 @@
+# sscheck 0.3.0
+First order quantifiers, many DStreams in properties, and performance improvements
+ * Add first order quantifiers on letters and optionally use atoms time in now, in the style of TPTL [#46](https://github.com/juanrh/sscheck/pull/46).  
+ * Support several DStreams in properties: 1 input 1 derived, 2 input 1 derived, 1 input 2 derived, 2 input 2 derived [#16](https://github.com/juanrh/sscheck/pull/16).
+ * Lazy next form, so the system might scales to complex formulas or with long timeouts [#25](https://github.com/juanrh/sscheck/pull/25). Only Next is lazy, which is enough combined with a nested next formula generation. 
+ * Simplify concurrency: synchronization to wait for the Streaming Context to stop; improve usage of parallel collections.
+ * Fix safeWordLength to return an Option, as it cannot be always statically computed due to first order quantifiers. 
+ * Update to Spark 1.6.2 to get rid of some bugs. 
+
 # sscheck 0.2.4
 Added cross Scala version compatibility, 2.10 and 2.11, see [#42](https://github.com/juanrh/sscheck/pull/42)
 
