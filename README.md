@@ -5,7 +5,9 @@ Utilities for using ScalaCheck with Spark and Spark Streaming, based on Specs2
 
 Use linear temporal logic to write ScalaCheck properties for Spark Streaming programs, see the [**Quickstart**](https://github.com/juanrh/sscheck/wiki/Quickstart) for details. See also
 
- * [**scaladoc**](http://juanrh.github.io/doc/sscheck/api)
+ * **scaladoc**
+   - [scala 2.10](http://juanrh.github.io/doc/sscheck/scala-2.10/api)
+   - [scala 2.11](http://juanrh.github.io/doc/sscheck/scala-2.11/api)
  * sbt dependency 
 
 ```scala
