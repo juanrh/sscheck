@@ -276,6 +276,23 @@ case class Solved[T](status : Prop.Status) extends NextFormula[T] {
   override def consume(time: Time)(atoms : T) = this
 } 
 
+/** This class adds information to the time and atom consumption functions
+ *  used  in Now, to enable a partial implementation of safeWordLength 
+ * */
+abstract class TimedAtomsConsumer[T](fun: Time => Function[T, Formula[T]]) 
+  extends Function[Time, Function[T, Formula[T]]]{
+  
+  override def apply(time: Time): (T => Formula[T]) = fun(time)
+  /** @return false iff fun always returns a Solved formula 
+   * */
+  def returnsDynamicFormula: Boolean
+}
+class StaticTimedAtomsConsumer[T](fun: Time => Function[T, Formula[T]]) extends TimedAtomsConsumer(fun) {
+  override def returnsDynamicFormula = false
+}
+class DynamicTimedAtomsConsumer[T](fun: Time => Function[T, Formula[T]]) extends TimedAtomsConsumer(fun) {
+  override def returnsDynamicFormula = true
+}
 /** Formulas that have to be resolved now, which correspond to atomic proposition
  *  as functions from the current state of the system to Specs2 assertions. 
  *  Note this also includes top / true and bottom / false as constant functions
@@ -287,20 +304,20 @@ object Now {
    * using ClassTag. Also why is there no conflict with the companion apply?
    */  
   def fromAtomsConsumer[T](atomsConsumer: T => Formula[T]): Now[T] = 
-    new Now[T](Function.const(atomsConsumer))
+    new Now(new DynamicTimedAtomsConsumer(Function.const(atomsConsumer)))
   def fromAtomsTimeConsumer[T](atomsTimeConsumer: (T, Time) => Formula[T]): Now[T] = 
-    new Now[T](time => atoms => atomsTimeConsumer(atoms, time))
+    new Now(new DynamicTimedAtomsConsumer(time => atoms => atomsTimeConsumer(atoms, time)))
   def fromStatusFun[T](atomsToStatus: T => Prop.Status): Now[T] =
-    new Now[T](Function.const(atomsToStatus andThen Solved.ofStatus _))
+    new Now(new StaticTimedAtomsConsumer(Function.const(atomsToStatus andThen Solved.ofStatus _)))
   def fromStatusTimeFun[T](atomsTimeToStatus: (T, Time) => Prop.Status): Now[T] =
-    new Now[T](time => atoms => Solved.ofStatus(atomsTimeToStatus(atoms, time)))
+    new Now(new StaticTimedAtomsConsumer(time => atoms => Solved.ofStatus(atomsTimeToStatus(atoms, time))))
   def apply[T, R <% Result](atomsToResult: T => R): Now[T] =
-    new Now[T](Function.const(atomsToResult andThen implicitly[Function[R,Result]] andThen Solved.ofResult _))  
+    new Now(new StaticTimedAtomsConsumer(Function.const(atomsToResult andThen implicitly[Function[R,Result]] andThen Solved.ofResult _)))
   def apply[T, R <% Result](atomsTimeToResult: (T, Time) => R): Now[T] =
-    new Now[T](time => atoms => Solved.ofResult(atomsTimeToResult(atoms, time)))
+    new Now(new StaticTimedAtomsConsumer(time => atoms => Solved.ofResult(atomsTimeToResult(atoms, time))))
 }
 
-case class Now[T](timedAtomsConsumer: Time => T => Formula[T]) 
+case class Now[T](timedAtomsConsumer: TimedAtomsConsumer[T])
   extends NextFormula[T] {
   /* Note the case class structural equality gives an implementation
    * for equals equivalent to the one below, as a Function is only
@@ -316,9 +333,11 @@ case class Now[T](timedAtomsConsumer: Time => T => Formula[T])
     }
     *    
     */
-  // we cannot compute this statically, because the returned
-  // formula depends on the input word
-  override def safeWordLength = None
+  // we cannot fully compute this statically, because the returned
+  // formula depends on the input word, but TimedAtomsConsumer.returnsDynamicFormula
+  // allows us to build a safe approximation 
+  override def safeWordLength = 
+    (!timedAtomsConsumer.returnsDynamicFormula) option Timeout(1)
   override def result = None
   override def consume(time: Time)(atoms: T) = 
     timedAtomsConsumer(time)(atoms).nextFormula 
