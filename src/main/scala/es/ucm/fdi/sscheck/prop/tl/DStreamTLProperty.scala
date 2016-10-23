@@ -293,8 +293,8 @@ object TestCaseContext {
       if (!rdd.isEmpty()) {
         val numRecords = rdd.count
         println(s"""${msgHeader}
-  Time: ${time} - ${dstreamName} (${numRecords} records)
-  ${msgHeader}""")
+Time: ${time} - ${dstreamName} (${numRecords} records)
+${msgHeader}""")
         if (numRecords > 0) println(rdd.take(numSampleRecords).mkString(lineSeparator))
         println("...")
       }
