@@ -392,29 +392,27 @@ class TestCaseContext[I1:ClassTag,I2:ClassTag,O1:ClassTag,O2:ClassTag, U](
     inputDStream1.foreachRDD { (inputBatch1, time) =>
       // NOTE: batch cannot be completed until this code finishes, use
       // future if needed to avoid blocking the batch completion
-      if (! inputBatch1.isEmpty) {
-        testCaseStateLock.synchronized {
-          if ((currFormula.result.isEmpty) && (numRemaningBatches > 0)) {
-            /* Note a new TestCaseContext with its own currFormula initialized to formulaNext 
-             * is created for each test case, but for each TestCaseContext currFormula 
-             * only gets to solved state once. 
-         	   * */
-            Try {
-              val inputBatchOpt1 = Some(if (catchRDDs) inputBatch1.cache else inputBatch1)
-              val inputBatchOpt2 = inputDStreamOpt2.map(getBatchForNow(_, time, catchRDDs))
-              val outputBatchOpt1 = Some(getBatchForNow(transformedStream1, time, catchRDDs)) 
-              val outputBatchOpt2 = transformedStreamOpt2.map(getBatchForNow(_, time, catchRDDs))
-              val adaptedAtoms = atomsAdapter(inputBatchOpt1, inputBatchOpt2, outputBatchOpt1, outputBatchOpt2)              
-              currFormula = currFormula.consume(Time(time.milliseconds))(adaptedAtoms)
-              numRemaningBatches = numRemaningBatches - 1
-            } recover { case throwable =>
-              // if there was some problem solving the assertions 
-              // then we solve the formula with an exception 
-              currFormula = Solved(Prop.Exception(throwable))
-            }
-            if (currFormula.result.isDefined || numRemaningBatches <= 0) { 
-              Future { this.stop() } 
-            }
+      testCaseStateLock.synchronized {
+        if ((currFormula.result.isEmpty) && (numRemaningBatches > 0)) {
+          /* Note a new TestCaseContext with its own currFormula initialized to formulaNext 
+           * is created for each test case, but for each TestCaseContext currFormula 
+           * only gets to solved state once. 
+       	   * */
+          Try {
+            val inputBatchOpt1 = Some(if (catchRDDs) inputBatch1.cache else inputBatch1)
+            val inputBatchOpt2 = inputDStreamOpt2.map(getBatchForNow(_, time, catchRDDs))
+            val outputBatchOpt1 = Some(getBatchForNow(transformedStream1, time, catchRDDs)) 
+            val outputBatchOpt2 = transformedStreamOpt2.map(getBatchForNow(_, time, catchRDDs))
+            val adaptedAtoms = atomsAdapter(inputBatchOpt1, inputBatchOpt2, outputBatchOpt1, outputBatchOpt2)              
+            currFormula = currFormula.consume(Time(time.milliseconds))(adaptedAtoms)
+            numRemaningBatches = numRemaningBatches - 1
+          } recover { case throwable =>
+            // if there was some problem solving the assertions 
+            // then we solve the formula with an exception 
+            currFormula = Solved(Prop.Exception(throwable))
+          }
+          if (currFormula.result.isDefined || numRemaningBatches <= 0) { 
+            Future { this.stop() } 
           }
         }
       }
