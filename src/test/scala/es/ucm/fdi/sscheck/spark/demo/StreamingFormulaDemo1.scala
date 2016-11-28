@@ -50,7 +50,7 @@ class StreamingFormulaDemo1
 
     val gen = BatchGen.always(BatchGen.ofNtoM(10, 50, arbitrary[Double]), numBatches)
     
-    forAllDStream[Double, Long](
+    forAllDStream(
       gen)(
       testSubject)(
       formula)

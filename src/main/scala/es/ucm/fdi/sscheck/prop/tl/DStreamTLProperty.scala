@@ -145,7 +145,7 @@ trait DStreamTLProperty
   // 1 in 2 out
   /** 1 input - 2 outputs version of [[DStreamTLProperty.forAllDStream[I1,O1]:Prop*]].
    * */
-  def forAllDStream[I1:ClassTag,O1:ClassTag,O2:ClassTag](
+  def forAllDStream12[I1:ClassTag,O1:ClassTag,O2:ClassTag](
     g1: SSGen[I1])(
     gt1: (DStream[I1]) => DStream[O1], 
     gt2: (DStream[I1]) => DStream[O2])(
@@ -166,7 +166,7 @@ trait DStreamTLProperty
   // 2 in 1 out
   /** 2 inputs - 2 output version of [[DStreamTLProperty.forAllDStream[I1,O1]:Prop*]].
    * */
-  def forAllDStream[I1:ClassTag,I2:ClassTag,O1:ClassTag](
+  def forAllDStream21[I1:ClassTag,I2:ClassTag,O1:ClassTag](
     g1: SSGen[I1], g2: SSGen[I2])(
     gt1: (DStream[I1], DStream[I2]) => DStream[O1])(
     formula: Formula[(RDD[I1], RDD[I2], RDD[O1])])(
@@ -186,7 +186,7 @@ trait DStreamTLProperty
   // 2 in 2 out
   /** 2 inputs - 2 outputs version of [[DStreamTLProperty.forAllDStream[I1,O1]:Prop*]].
    * */
-  def forAllDStream[I1:ClassTag,I2:ClassTag,O1:ClassTag,O2:ClassTag](
+  def forAllDStream22[I1:ClassTag,I2:ClassTag,O1:ClassTag,O2:ClassTag](
     g1: SSGen[I1], g2: SSGen[I2])(
     gt1: (DStream[I1], DStream[I2]) => DStream[O1],
     gt2: (DStream[I1], DStream[I2]) => DStream[O2])(

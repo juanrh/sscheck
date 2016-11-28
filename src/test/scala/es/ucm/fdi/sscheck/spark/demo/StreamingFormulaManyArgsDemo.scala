@@ -63,7 +63,7 @@ class StreamingFormulaManyArgsDemo
      xsys.map(_._1).subtract(xs).count === 0 and
      xsys.map(_._2).subtract(ys).count === 0
     } during numBatches
-    forAllDStream[Int, Int, (Int, Int)](
+    forAllDStream21(
       genAlwaysInts(1, 10), 
       genAlwaysInts(20, 30))(
       dstreamsCartesian)(
@@ -80,7 +80,7 @@ class StreamingFormulaManyArgsDemo
       triples.map(_._2).subtract(xs).count === 0 and
       triples.map(_._3).subtract(xs).count === 0 
     } during numBatches
-    forAllDStream[Int, (Int, Int), (Int, Int, Int)](
+    forAllDStream12(
       genAlwaysInts(1, 10))(
       _.map{x => (x,x)}, 
       _.map{x => (x,x, x)})(
@@ -96,7 +96,7 @@ class StreamingFormulaManyArgsDemo
       ysxs.map(_._1).subtract(ys).count === 0 and
       ysxs.map(_._2).subtract(xs).count === 0 
     } during numBatches
-    forAllDStream[Int, Int, (Int, Int), (Int, Int)](
+    forAllDStream22(
       genAlwaysInts(1, 10), 
       genAlwaysInts(20, 30))(
       (xs, ys) => cartesianDStreamOk(xs, ys), 
