@@ -3,7 +3,6 @@ package es.ucm.fdi.sscheck.prop.tl
 import org.scalacheck.Gen
 import org.scalacheck.Prop
 import org.scalacheck.util.Pretty
-
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
@@ -14,17 +13,17 @@ import scala.reflect.ClassTag
 import scala.concurrent.{Future, ExecutionContext}
 import java.util.concurrent.Executors
 import scala.util.{Try, Success, Failure}
-
 import org.slf4j.LoggerFactory
-
 import scala.util.Properties.lineSeparator
 import scala.language.implicitConversions
-
 import es.ucm.fdi.sscheck.gen.UtilsGen.optGenToGenOpt
 import es.ucm.fdi.sscheck.{TestCaseIdCounter,TestCaseId}
 import es.ucm.fdi.sscheck.spark.{SharedSparkContextBeforeAfterAll,Parallelism}
 import es.ucm.fdi.sscheck.spark.streaming
 import es.ucm.fdi.sscheck.spark.streaming.TestInputStream
+
+import DStreamTLProperty.SSeq
+import com.google.common.collect.Synchronized
 
 /*
  * TODO
@@ -58,8 +57,6 @@ object DStreamTLProperty {
   type SSeq[A] = Seq[Seq[A]]
   type SSGen[A] = Gen[SSeq[A]]
 }
-
-import DStreamTLProperty.SSeq
 
 trait DStreamTLProperty 
   extends SharedSparkContextBeforeAfterAll {
@@ -126,8 +123,8 @@ trait DStreamTLProperty
    *  started in the same JVM 
    * */
   def forAllDStream[I1:ClassTag,O1:ClassTag](
-    g1: SSGen[I1])(
-    gt1: (DStream[I1]) => DStream[O1])(
+    gen1: SSGen[I1])(
+    trans1: (DStream[I1]) => DStream[O1])(
     formula: Formula[(RDD[I1], RDD[O1])])(
     implicit pp1: SSeq[I1] => Pretty): Prop = {
       
@@ -136,8 +133,8 @@ trait DStreamTLProperty
                               a3: Option[RDD[O1]], a4: Option[RDD[Unit]]): U = 
       (a1.get, a3.get)
     forAllDStreamOption[I1,Unit,O1,Unit,U](
-      g1, None)(
-      (ds1, ds2) => gt1(ds1.get), 
+      gen1, None)(
+      (ds1, ds2) => trans1(ds1.get), 
       None)(
       formula)
   }
@@ -146,9 +143,9 @@ trait DStreamTLProperty
   /** 1 input - 2 outputs version of [[DStreamTLProperty.forAllDStream[I1,O1]:Prop*]].
    * */
   def forAllDStream12[I1:ClassTag,O1:ClassTag,O2:ClassTag](
-    g1: SSGen[I1])(
-    gt1: (DStream[I1]) => DStream[O1], 
-    gt2: (DStream[I1]) => DStream[O2])(
+    gen1: SSGen[I1])(
+    trans1: (DStream[I1]) => DStream[O1], 
+    trans2: (DStream[I1]) => DStream[O2])(
     formula: Formula[(RDD[I1], RDD[O1], RDD[O2])])(
     implicit pp1: SSeq[I1] => Pretty): Prop = {
     
@@ -157,9 +154,9 @@ trait DStreamTLProperty
                               a3: Option[RDD[O1]], a4: Option[RDD[O2]]): U = 
       (a1.get, a3.get, a4.get)
     forAllDStreamOption[I1,Unit,O1,O2,U](
-      g1, None)(
-      (ds1, ds2) => gt1(ds1.get), 
-      Some((ds1, ds2) => gt2(ds1.get)))(
+      gen1, None)(
+      (ds1, ds2) => trans1(ds1.get), 
+      Some((ds1, ds2) => trans2(ds1.get)))(
       formula)
   }
     
@@ -167,8 +164,8 @@ trait DStreamTLProperty
   /** 2 inputs - 2 output version of [[DStreamTLProperty.forAllDStream[I1,O1]:Prop*]].
    * */
   def forAllDStream21[I1:ClassTag,I2:ClassTag,O1:ClassTag](
-    g1: SSGen[I1], g2: SSGen[I2])(
-    gt1: (DStream[I1], DStream[I2]) => DStream[O1])(
+    gen1: SSGen[I1], gen2: SSGen[I2])(
+    trans1: (DStream[I1], DStream[I2]) => DStream[O1])(
     formula: Formula[(RDD[I1], RDD[I2], RDD[O1])])(
     implicit pp1: SSeq[I1] => Pretty, pp2: SSeq[I2] => Pretty): Prop = {
     
@@ -177,8 +174,8 @@ trait DStreamTLProperty
                               a3: Option[RDD[O1]], a4: Option[RDD[Unit]]): U = 
       (a1.get, a2.get, a3.get)
     forAllDStreamOption[I1,I2,O1,Unit,U](
-      g1, Some(g2))(
-      (ds1, ds2) => gt1(ds1.get, ds2.get), 
+      gen1, Some(gen2))(
+      (ds1, ds2) => trans1(ds1.get, ds2.get), 
       None)(
       formula)
   }
@@ -187,9 +184,9 @@ trait DStreamTLProperty
   /** 2 inputs - 2 outputs version of [[DStreamTLProperty.forAllDStream[I1,O1]:Prop*]].
    * */
   def forAllDStream22[I1:ClassTag,I2:ClassTag,O1:ClassTag,O2:ClassTag](
-    g1: SSGen[I1], g2: SSGen[I2])(
-    gt1: (DStream[I1], DStream[I2]) => DStream[O1],
-    gt2: (DStream[I1], DStream[I2]) => DStream[O2])(
+    gen1: SSGen[I1], gen2: SSGen[I2])(
+    trans1: (DStream[I1], DStream[I2]) => DStream[O1],
+    trans2: (DStream[I1], DStream[I2]) => DStream[O2])(
     formula: Formula[(RDD[I1], RDD[I2], RDD[O1], RDD[O2])])(
     implicit pp1: SSeq[I1] => Pretty, pp2: SSeq[I2] => Pretty): Prop = {
     
@@ -198,9 +195,9 @@ trait DStreamTLProperty
                               a3: Option[RDD[O1]], a4: Option[RDD[O2]]): U = 
       (a1.get, a2.get, a3.get, a4.get)
     forAllDStreamOption[I1,I2,O1,O2,U](
-      g1, Some(g2))(
-      (ds1, ds2) => gt1(ds1.get, ds2.get), 
-      Some((ds1, ds2) => gt2(ds1.get, ds2.get)))(
+      gen1, Some(gen2))(
+      (ds1, ds2) => trans1(ds1.get, ds2.get), 
+      Some((ds1, ds2) => trans2(ds1.get, ds2.get)))(
       formula)
   }
   
@@ -242,15 +239,12 @@ trait DStreamTLProperty
        * for the next test case, otherwise we get "java.lang.IllegalStateException: Only one StreamingContext may 
        * be started in this JVM" (see SPARK-2243)  
        * */
-      testCaseContext.waitForSolvedFormula()
-      // In case there was a timeout waiting for test execution, again too avoid more than one StreamingContext  
+      testCaseContext.waitForCompletion()
+      // In case there was a timeout waiting for test execution, again to avoid more than one StreamingContext  
       // note this does nothing if it was already stopped
       testCaseContext.stop() 
      
-      // using Prop.Undecided allows us to return undecided if the test case is not
-      // long enough (i.e. it is a word with not enough letters) to get a conclusive 
-      // formula evaluation
-      val testCaseResult = testCaseContext.currFormula.result.getOrElse(Prop.Undecided)  
+      val testCaseResult = testCaseContext.result
       
       // Note: ScalaCheck will show the correct test case that caused the counterexample
       // because only the test case that generated that counterexample will fail. Anyway we could
@@ -285,6 +279,12 @@ object TestCaseContext {
   // Constants used for printing a sample of the generated values for each batch
   private val msgHeader = "-"*43
   private val numSampleRecords = 4
+  
+  /* A single execution context for all test cases because we are limited to 
+   * one test case per JVM due to the 1 streaming context per JVM limitation 
+   * of SPARK-2243
+   */
+  implicit val ec = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(1))
 
   /** Print some elements of dstream to stdout
    */
@@ -303,9 +303,18 @@ ${msgHeader}""")
    */
   private def touchDStream[A](dstream: DStream[A]): Unit = 
     dstream.foreachRDD {rdd => {}}
-  // one for all test cases because we are limited to one test case per JVM
-  // due to the 1 streaming context per JVM limitation of SPARK-2243
-  implicit val ec = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(1))
+    
+  /* Note https://issues.apache.org/jira/browse/SPARK-10722 causes 
+   * "Uncaught exception: RDDBlockId not found in driver-heartbeater", 
+   * "java.lang.ClassNotFoundException: org.apache.spark.storage.RDDBlockId", 
+   * "ERROR TaskSchedulerImpl: Lost executor driver on localhost: Executor heartbeat timed out" and
+   * "ExecutorLostFailure (executor driver exited caused by one of the running tasks) Reason: Executor heartbeat timed out"
+   * but that reported as fixed in v 1.6.2 in SPARK-10722  
+   */
+  private def getBatchForNow[T](ds: DStream[T], time: SparkTime, catchRDD: Boolean): RDD[T] = {
+    val batch = ds.slice(time, time).head
+    if (catchRDD && batch.getStorageLevel == StorageLevel.NONE) batch.cache else batch
+  } 
 }
 /** 
  *  Objects of this class define the DStreams involved in the test case execution
@@ -333,11 +342,11 @@ class TestCaseContext[I1:ClassTag,I2:ClassTag,O1:ClassTag,O2:ClassTag, U](
    */
   // TODO add assertions on Option compatibilities
   
-  import TestCaseContext.{logger,printDStream,touchDStream,ec}
+  import TestCaseContext.{logger,printDStream,touchDStream,ec,getBatchForNow}
   
   /** Current value of the formula we are evaluating in this test case contexts 
    */
-  @transient @volatile var currFormula: NextFormula[U] = formulaNext 
+  @transient @volatile private var currFormula: NextFormula[U] = formulaNext 
   // Number of batches in the test case that are waiting to be executed
   @transient @volatile private var numRemaningBatches: Int = 
     (testCase1.length) max (testCaseOpt2.fold(0){_.length})
@@ -353,19 +362,9 @@ class TestCaseContext[I1:ClassTag,I2:ClassTag,O1:ClassTag,O2:ClassTag, U](
   // batch interval of the streaming context
   @transient private val batchInterval = inputDStream1.slideDuration.milliseconds
       
-  /* note https://issues.apache.org/jira/browse/SPARK-10722 causes 
-   *  "Uncaught exception: RDDBlockId not found in driver-heartbeater", 
-   *  "java.lang.ClassNotFoundException: org.apache.spark.storage.RDDBlockId", 
-   *  "ERROR TaskSchedulerImpl: Lost executor driver on localhost: Executor heartbeat timed out" and
-   *  "ExecutorLostFailure (executor driver exited caused by one of the running tasks) Reason: Executor heartbeat timed out"
-   *  but that reported as fixed in v 1.6.2 in SPARK-10722  
-   */
-  private def getBatchForNow[T](ds: DStream[T], time: SparkTime, catchRDD: Boolean): RDD[T] = {
-    val batch = ds.slice(time, time).head
-    if (catchRDD && batch.getStorageLevel == StorageLevel.NONE) batch.cache else batch
-  } 
   
-  def init(): Unit = {
+  
+  def init(): Unit = this.synchronized {
     // -----------------------------------
     // create input and output DStreams
     @transient val inputDStreamOpt1 = Some(inputDStream1)
@@ -435,9 +434,15 @@ class TestCaseContext[I1:ClassTag,I2:ClassTag,O1:ClassTag,O2:ClassTag, U](
    *  @return true iff the formula for this test case context is resolved, 
    *  otherwise return false
    */
-  def waitForSolvedFormula(): Unit = {
+  def waitForCompletion(): Unit = {
     this.ssc.awaitTerminationOrTimeout(batchInterval * (maxNumberBatches*1.3).ceil.toInt)
   }
+  
+  /** @returns The result of the execution of this test case, or Prop.Undecided
+   *  if the result is inconclusive (e.g. because the test case it's not
+   *  long enough), or yet unknown. 
+   * */
+  def result: Prop.Status = currFormula.result.getOrElse(Prop.Undecided)
   
   /** Stops the internal streaming context, if it is running  
    */
