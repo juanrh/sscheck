@@ -2,8 +2,6 @@ package es.ucm.fdi.sscheck.spark.simple
 
 import org.junit.runner.RunWith
 import org.specs2.runner.JUnitRunner
-import org.specs2.ScalaCheck
-import org.specs2.Specification
 import org.specs2.matcher.ResultMatchers
 import org.scalacheck.Arbitrary.arbitrary
 import org.apache.spark.rdd.RDD
@@ -20,37 +18,41 @@ import es.ucm.fdi.sscheck.gen.Batch
 
 @RunWith(classOf[JUnitRunner])
 class SimpleStreamingFormulas 
-  extends Specification 
+  extends org.specs2.Specification 
   with DStreamTLProperty
-  with ResultMatchers
-  with ScalaCheck {
+  with org.specs2.ScalaCheck {
   
    // Spark configuration
   override def sparkMaster : String = "local[*]"
-  override def batchDuration = Duration(100)
+  override def batchDuration = Duration(50)
   override def defaultParallelism = 4  
 
   def is = 
     sequential ^ s2"""
     Simple demo Specs2 example for ScalaCheck properties with temporal
     formulas on Spark Streaming programs
-      - where if we generate positive numbers then we always get numbers greater than zero $pending positiveNumbersAndIdAreGtZero
-      - where time increments for each batch $timeIncreasesMonotonically
+      - Given a stream of integers
+        When we filter out negative numbers
+        Then we get only numbers greater or equal to 
+          zero $filterOutNegativeGetGeqZero
+      - where time increments for each batch $pending timeIncreasesMonotonically
       """
       
-    def positiveNumbersAndIdAreGtZero = {
+    def filterOutNegativeGetGeqZero = {
       type U = (RDD[Int], RDD[Int])
       val numBatches = 10
-      val gen = BatchGen.always(BatchGen.ofNtoM(10, 50, Gen.choose(1, 1000)), numBatches)
+      val gen = BatchGen.always(BatchGen.ofNtoM(10, 50, arbitrary[Int]), 
+                                numBatches)
       val formula = always(nowTime[U]{ (letter, time) => 
-         letter._2 should foreachRecord { _ > 0} 
+        val (_input, output) = letter
+        output should foreachRecord {_ >= 0} 
       }) during numBatches
       
       forAllDStream(
       gen)(
-      identity[DStream[Int]])(
+      _.filter{ x => !(x < 0)})(
       formula)
-  }.set(minTestsOk = 10).verbose
+  }.set(minTestsOk = 50).verbose
   
     def timeIncreasesMonotonically = {
       type U = (RDD[Int], RDD[Int])
@@ -59,9 +61,9 @@ class SimpleStreamingFormulas
       
       val formula = always(nowTimeF[U]{ (letter, time) => 
         nowTime[U]{ (nextLetter, nextTime) =>
-          time.millis < nextTime.millis
+          time.millis <= nextTime.millis
         } 
-      }) during (numBatches-1)
+      }) during numBatches-1
       
       forAllDStream(
       gen)(
