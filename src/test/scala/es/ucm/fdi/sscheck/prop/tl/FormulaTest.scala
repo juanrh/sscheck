@@ -32,7 +32,7 @@ class FormulaTest
   val (i, s) = ((_ : U)._1, (_ : U)._2)
   // some atomic propositions
   val aP : Form = at(i)(_  must be_>(2))
-  val aQ = at(s)(_ contains "hola")
+  val aQ : Form = at(s)(_ contains "hola")
       
   def exampleFormulas = {         
     val notP = ! aP
@@ -51,9 +51,8 @@ class FormulaTest
       aP until aQ
     }
     
-    aP must not be_==(aQ) and 
+    aP must not be_==(aQ)
     // TODO: add examples for each of the case classes
-    ok
   }
   
   // TODO: adapt to new lazy next form 
@@ -61,7 +60,7 @@ class FormulaTest
   def nextFormulaOk = {
     // now
     { aP. nextFormula === aP } and
-    { aP. nextFormula must not be_==(aQ) } and 
+    { aP. nextFormula must not be_==(aQ. nextFormula) } and
     // solved
     { 
       val solvedP = aP. nextFormula.consume(Time(0L))((3, "hola")) 

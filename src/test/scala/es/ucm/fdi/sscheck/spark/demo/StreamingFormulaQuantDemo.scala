@@ -16,7 +16,7 @@ import org.apache.spark.streaming.dstream.DStream._
 import scalaz.syntax.std.boolean._
     
 import es.ucm.fdi.sscheck.spark.streaming.SharedStreamingContextBeforeAfterEach
-import es.ucm.fdi.sscheck.prop.tl.{Formula,DStreamTLProperty,Now}
+import es.ucm.fdi.sscheck.prop.tl.{Formula,DStreamTLProperty}
 import es.ucm.fdi.sscheck.prop.tl.Formula._
 import es.ucm.fdi.sscheck.gen.{PDStreamGen,BatchGen}
 import es.ucm.fdi.sscheck.gen.BatchGenConversions._
@@ -91,10 +91,10 @@ class StreamingFormulaQuantDemo
           badIds.subtract(outBatch) isEmpty
       }} during nestedTimeout
     }} during tailTimeout
-    
+
     // Same as badIdsAreAlwaysBanned but using overloads of now(), just to check the syntax is ok
     val badIdsAreAlwaysBannedNow : Formula[U] = {      
-      always { nowF[U] { case (inBatch, _) =>
+      always { nextF[U] { case (inBatch, _) =>
         val badIds = inBatch.filter{ case (_, isGood) => ! isGood }. keys
         always { now[U] { case (_, outBatch) =>
           badIds.subtract(outBatch) isEmpty
