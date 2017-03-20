@@ -35,7 +35,7 @@ class SimpleStreamingFormulas
         When we filter out negative numbers
         Then we get only numbers greater or equal to 
           zero $filterOutNegativeGetGeqZero
-      - where time increments for each batch $pending timeIncreasesMonotonically
+      - where time increments for each batch $timeIncreasesMonotonically
       """
       
     def filterOutNegativeGetGeqZero = {
@@ -52,23 +52,22 @@ class SimpleStreamingFormulas
       gen)(
       _.filter{ x => !(x < 0)})(
       formula)
-  }.set(minTestsOk = 50).verbose
-  
+    }.set(minTestsOk = 50).verbose
+
     def timeIncreasesMonotonically = {
       type U = (RDD[Int], RDD[Int])
       val numBatches = 10
       val gen = BatchGen.always(BatchGen.ofNtoM(10, 50, arbitrary[Int]))
-      
-      val formula = always(nowTimeF[U]{ (letter, time) => 
+
+      val formula = always(nextTime[U]{ (letter, time) =>
         nowTime[U]{ (nextLetter, nextTime) =>
           time.millis <= nextTime.millis
-        } 
+        }
       }) during numBatches-1
-      
+
       forAllDStream(
       gen)(
       identity[DStream[Int]])(
       formula)
-  }.set(minTestsOk = 10).verbose
-    
+    }.set(minTestsOk = 10).verbose
 }

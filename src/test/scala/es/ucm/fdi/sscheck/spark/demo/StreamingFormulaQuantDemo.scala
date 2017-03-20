@@ -5,7 +5,6 @@ import org.specs2.runner.JUnitRunner
 import org.specs2.ScalaCheck
 import org.specs2.Specification
 import org.specs2.matcher.ResultMatchers
-import org.scalacheck.Arbitrary.arbitrary
 import org.scalacheck.Gen
 
 import org.apache.spark.rdd.RDD
@@ -15,13 +14,11 @@ import org.apache.spark.streaming.dstream.DStream._
 
 import scalaz.syntax.std.boolean._
     
-import es.ucm.fdi.sscheck.spark.streaming.SharedStreamingContextBeforeAfterEach
-import es.ucm.fdi.sscheck.prop.tl.{Formula,DStreamTLProperty}
+import es.ucm.fdi.sscheck.prop.tl.DStreamTLProperty
 import es.ucm.fdi.sscheck.prop.tl.Formula._
-import es.ucm.fdi.sscheck.gen.{PDStreamGen,BatchGen}
+import es.ucm.fdi.sscheck.gen.BatchGen
 import es.ucm.fdi.sscheck.gen.BatchGenConversions._
 import es.ucm.fdi.sscheck.gen.PDStreamGenConversions._
-import es.ucm.fdi.sscheck.matcher.specs2.RDDMatchers._
 
 @RunWith(classOf[JUnitRunner])
 class StreamingFormulaQuantDemo 
@@ -93,7 +90,7 @@ class StreamingFormulaQuantDemo
     }} during tailTimeout
 
     // Same as badIdsAreAlwaysBanned but using overloads of now(), just to check the syntax is ok
-    val badIdsAreAlwaysBannedNow : Formula[U] = {      
+    val badIdsAreAlwaysBannedNow = {
       always { nextF[U] { case (inBatch, _) =>
         val badIds = inBatch.filter{ case (_, isGood) => ! isGood }. keys
         always { now[U] { case (_, outBatch) =>
@@ -101,21 +98,21 @@ class StreamingFormulaQuantDemo
         }} during nestedTimeout
       }} during tailTimeout
     }
-    
+
     // trivial example just to check that we can use the time in formulas
-     val timeAlwaysIncreases = always( nowTimeF[U]{ (_atoms1, t1) => 
-      always( nowTime[U]{ (_atoms2, t2) => 
+     val timeAlwaysIncreases = always( nextTime[U]{ (_, t1) =>
+      always( nowTime[U]{ (_, t2) =>
         println(s"time $t2 should be greater than time $t1")
         t2.millis must beGreaterThan(t1.millis)
       }) during nestedTimeout
-    }) during tailTimeout      
-        
-    forAllDStream[(UserId, Boolean), UserId](    
+    }) during tailTimeout
+
+    forAllDStream(
       gen)(
-      testSubject)( 
+      testSubject)(
       badIdsAreAlwaysBanned and
       badIdsAreAlwaysBannedAt and
-      badIdsAreAlwaysBannedNow and 
+      badIdsAreAlwaysBannedNow and
       timeAlwaysIncreases)
-  }.set(minTestsOk = 15).verbose  
+  }.set(minTestsOk = 15).verbose
 }

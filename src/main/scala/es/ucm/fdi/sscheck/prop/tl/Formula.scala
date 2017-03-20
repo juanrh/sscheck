@@ -75,7 +75,7 @@ object Formula {
    *   with the case syntax (see https://groups.google.com/forum/#!topic/scala-user/rkau5IcuH48). See example for always()
    * */
 
-  /** @return a formula where the result of applying to the current tletter
+  /** @return a formula where the result of applying to the current letter
     *         the projection proj and then assertion must hold now
     */
   def at[T, A, R <% Result](proj : (T) => A)(assertion : A => R): Formula[T] =
@@ -111,7 +111,16 @@ object Formula {
    *         letterToFormula to the current letter must hold in the next instant
    * */
   def next[T](letterToFormula: T => Formula[T]): Formula[T] = BindNext.fromAtomsConsumer(letterToFormula)
+  /** @return an application of BindNext to letterToFormula: the result of applying
+    *         letterToFormula to the current letter must hold in the next instant
+    * */
   def nextF[T](letterToFormula: T => Formula[T]): Formula[T] = next(letterToFormula)
+  /** @return an application of BindNext to letterToFormula: the result of applying
+    *         letterToFormula to the current letter must hold in the next instant
+    * */
+  def nextTime[T](letterToFormula: (T, Time) => Formula[T]): Formula[T] =
+    BindNext.fromAtomsTimeConsumer(letterToFormula)
+
   /** @return the result of applying next to phi the number of
    *  times specified
    * */
@@ -123,20 +132,25 @@ object Formula {
   /* NOTE the Scaladoc description for the variants of now() are true without a
 next because Result corresponds to a timeless formula, and because NextFormula.consume()
 leaves the formula in a solved state without a need to consume any additional letter
-after the first one 
+after the first one
  */
   /** @return a formula where the result of applying letterToResult to the
     *         current letter must hold now
     */
   def now[T](letterToResult: T => Result): BindNext[T] = BindNext(letterToResult)
-  def nowTime[T](assertion: (T, Time) => Result): BindNext[T] = BindNext(assertion)
+  /** @return a formula where the result of applying letterToResult to the
+    *         current letter must hold now
+    */
+  def nowTime[T](letterToResult: (T, Time) => Result): BindNext[T] = BindNext(letterToResult)
 
   /** @return a formula where the result of applying letterToStatus to the
     *         current letter must hold now
     */
   def nowS[T](letterToStatus: T => Prop.Status): BindNext[T] = BindNext.fromStatusFun(letterToStatus)
-  def nowTimeS[T](assertion: (T, Time) => Prop.Status): BindNext[T] = BindNext.fromStatusTimeFun(assertion)
-
+  /** @return a formula where the result of applying letterToStatus to the
+    *         current letter must hold now
+    */
+  def nowTimeS[T](letterToStatus: (T, Time) => Prop.Status): BindNext[T] = BindNext.fromStatusTimeFun(letterToStatus)
 
   def eventually[T](phi: Formula[T]): TimeoutMissingFormula[T] =
     new TimeoutMissingFormula[T](Eventually(phi, _))
@@ -146,29 +160,41 @@ after the first one
   def eventually[T](letterToFormula: T => Formula[T]): TimeoutMissingFormula[T] =
     eventuallyF(letterToFormula)
   /** @return a formula where eventually the result of applying letterToResult to the
-    *         current letter must hold in the next instant
+    *         current letter must hold now
     */
   def eventuallyR[T](letterToResult: T => Result): TimeoutMissingFormula[T] =
-    eventually(BindNext(letterToResult))
+    eventually(now(letterToResult))
 
   /** @return a formula where eventually the result of applying letterToStatus to the
-    *         current letter must hold in the next instant
+    *         current letter must hold now
     */
   def eventuallyS[T](letterToStatus: T => Prop.Status): TimeoutMissingFormula[T] =
-    eventually(BindNext.fromStatusFun(letterToStatus))
+    eventually(nowS(letterToStatus))
   /** @return a formula where eventually the result of applying letterToFormula to the
     *         current letter must hold in the next instant
     */
   def eventuallyF[T](letterToFormula: T => Formula[T]): TimeoutMissingFormula[T] =
-    eventually(BindNext.fromAtomsConsumer(letterToFormula))
+    eventually(next(letterToFormula))
 
   /** Alias of eventually that can be used when there is a name class, for example
    *  with EventuallyMatchers.eventually
    * */
   def later[T](phi: Formula[T]) = eventually(phi)
+  /** Alias of eventually that can be used when there is a name class, for example
+    *  with EventuallyMatchers.eventually
+    * */
   def later[T](assertion: T => Formula[T]) = eventually(assertion)
+  /** Alias of eventually that can be used when there is a name class, for example
+    *  with EventuallyMatchers.eventually
+    * */
   def laterR[T](assertion: T => Result) = eventuallyR(assertion)
+  /** Alias of eventually that can be used when there is a name class, for example
+    *  with EventuallyMatchers.eventually
+    * */
   def laterS[T](assertion: T => Prop.Status) = eventuallyS(assertion)
+  /** Alias of eventually that can be used when there is a name class, for example
+    *  with EventuallyMatchers.eventually
+    * */
   def laterF[T](assertion: T => Formula[T]) = eventuallyF(assertion)
 
   def always[T](phi: Formula[T]) = new TimeoutMissingFormula[T](Always(phi, _))
@@ -178,25 +204,26 @@ after the first one
   def always[T](letterToFormula: T => Formula[T]): TimeoutMissingFormula[T] =
     alwaysF[T](letterToFormula)
   /** @return a formula where always the result of applying letterToResult to the
-    *         current letter must hold in the next instant
+    *         current letter must hold now
     */
   def alwaysR[T](letterToResult: T => Result): TimeoutMissingFormula[T] =
-    always(BindNext(letterToResult))
+    always(now(letterToResult))
   /** @return a formula where always the result of applying letterToStatus to the
-    *         current letter must hold in the next instant
+    *         current letter must hold now
     */
   def alwaysS[T](letterToStatus: T => Prop.Status): TimeoutMissingFormula[T] =
-    always(BindNext.fromStatusFun(letterToStatus))
+    always(nowS(letterToStatus))
   /** @return a formula where always the result of applying letterToFormula to the
     *         current letter must hold in the next instant
     */
   def alwaysF[T](letterToFormula: T => Formula[T]): TimeoutMissingFormula[T] =
-    always(BindNext.fromAtomsConsumer(letterToFormula))
+    always(next(letterToFormula))
 }
 
 // using trait for the root of the AGT as recommended in http://twitter.github.io/effectivescala/
 sealed trait Formula[T]
   extends Serializable {
+  import Formula._
 
   def safeWordLength: Option[Timeout]
   def nextFormula: NextFormula[T]
@@ -216,21 +243,19 @@ sealed trait Formula[T]
   def until(letterToFormula : T => Formula[T]): TimeoutMissingFormula[T] = this.untilF(letterToFormula)
   /** @return a formula where this formula happens until the result
     *          of applying letterToResult to the current letter holds
-    *          in the next instant
     */
-  def untilR(letterToResult : T => Result): TimeoutMissingFormula[T] = this.until(BindNext(letterToResult))
+  def untilR(letterToResult : T => Result): TimeoutMissingFormula[T] = this.until(now(letterToResult))
   /** @return a formula where this formula happens until the result
     *          of applying letterToStatus to the current letter holds
-    *          in the next instant
     */
   def untilS(letterToStatus : T => Prop.Status): TimeoutMissingFormula[T] =
-    this.until(BindNext.fromStatusFun(letterToStatus))
+    this.until(nowS(letterToStatus))
   /** @return a formula where this formula happens until the result
     *          of applying letterToFormula to the current letter holds
     *          in the next instant
     */
   def untilF(letterToFormula : T => Formula[T]): TimeoutMissingFormula[T] =
-    this.until(BindNext.fromAtomsConsumer(letterToFormula))
+    this.until(next(letterToFormula))
 
   def release(phi2 : Formula[T]): TimeoutMissingFormula[T] = new TimeoutMissingFormula[T](Release(this, phi2, _))
   /** @return a formula where this formula releases the result
@@ -240,21 +265,21 @@ sealed trait Formula[T]
   def release(letterToFormula : T => Formula[T]): TimeoutMissingFormula[T] = this.releaseF(letterToFormula)
   /** @return a formula where this formula releases the result
     *          of applying letterToResult to the current letter from
-    *          holding in the next instant
+    *          holding now
     */
-  def releaseR(letterToResult : T => Result): TimeoutMissingFormula[T] = this.release(BindNext(letterToResult))
+  def releaseR(letterToResult : T => Result): TimeoutMissingFormula[T] = this.release(now(letterToResult))
   /** @return a formula where this formula releases the result
     *          of applying letterToStatus to the current letter from
-    *          holding in the next instant
+    *          holding now
     */
   def releaseS(letterToStatus : T => Prop.Status): TimeoutMissingFormula[T] =
-    this.release(BindNext.fromStatusFun(letterToStatus))
+    this.release(nowS(letterToStatus))
   /** @return a formula where this formula releases the result
     *          of applying letterToFormula to the current letter from
     *          holding in the next instant
     */
   def releaseF(letterToFormula : T => Formula[T]): TimeoutMissingFormula[T] =
-    this.release(BindNext.fromAtomsConsumer(letterToFormula))
+    this.release(next(letterToFormula))
 }
 
 /** Restricted class of formulas that are in a form suitable for the
