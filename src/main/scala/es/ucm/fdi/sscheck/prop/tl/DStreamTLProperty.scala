@@ -361,9 +361,7 @@ class TestCaseContext[I1:ClassTag,I2:ClassTag,O1:ClassTag,O2:ClassTag, U](
       new TestInputStream[I1](ssc.sparkContext, ssc, testCase1, parallelism.numSlices)
   // batch interval of the streaming context
   @transient private val batchInterval = inputDStream1.slideDuration.milliseconds
-      
-  
-  
+
   def init(): Unit = this.synchronized {
     // -----------------------------------
     // create input and output DStreams
