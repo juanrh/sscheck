@@ -438,7 +438,7 @@ class TestCaseContext[I1:ClassTag,I2:ClassTag,O1:ClassTag,O2:ClassTag, U](
     this.ssc.awaitTerminationOrTimeout(batchInterval * (maxNumberBatches*1.3).ceil.toInt)
   }
   
-  /** @returns The result of the execution of this test case, or Prop.Undecided
+  /** @return The result of the execution of this test case, or Prop.Undecided
    *  if the result is inconclusive (e.g. because the test case it's not
    *  long enough), or yet unknown. 
    * */
