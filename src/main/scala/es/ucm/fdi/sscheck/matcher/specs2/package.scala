@@ -72,9 +72,9 @@ package es.ucm.fdi.sscheck.matcher {
         lazy val errorMsg: String =
           List(
             (!inActualNotInExpected.isEmpty) option
-              s"unexpected records: ${inActualNotInExpected.take(numErrors).mkString(",") ...}",
+              s"unexpected records: ${inActualNotInExpected.take(numErrors).mkString(",")} ...",
             (!inExpectedNotInActual.isEmpty) option
-              s"missing records:  ${inExpectedNotInActual.take(numErrors).mkString(",") ...}"
+              s"missing records:  ${inExpectedNotInActual.take(numErrors).mkString(",")} ..."
           ).filter(_.isDefined)
             .map(_.get).mkString(",")
         (
