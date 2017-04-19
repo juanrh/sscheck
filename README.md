@@ -8,10 +8,10 @@ Use linear temporal logic to write ScalaCheck properties for Spark Streaming pro
  * **scaladoc**
    - [scala 2.10](http://juanrh.github.io/doc/sscheck/scala-2.10/api)
    - [scala 2.11](http://juanrh.github.io/doc/sscheck/scala-2.11/api)
- * sbt dependency 
+ * sbt dependency
 
 ```scala
-lazy val sscheckVersion = "0.2.4"
+lazy val sscheckVersion = "0.3.2"
 libraryDependencies += "es.ucm.fdi" %% "sscheck" % sscheckVersion
 resolvers += Resolver.bintrayRepo("juanrh", "maven")
 ```
