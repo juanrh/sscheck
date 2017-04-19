@@ -32,7 +32,7 @@ class StreamingFormulaDemo2
   
   // Spark configuration
   override def sparkMaster : String = "local[*]"
-  override def batchDuration = Duration(300) 
+  override def batchDuration = Duration(300)
   override def defaultParallelism = 3
   override def enableCheckpointing = true
 
@@ -67,7 +67,7 @@ class StreamingFormulaDemo2
     type U = (RDD[(UserId, Boolean)], RDD[UserId])
     val (inBatch, outBatch) = ((_ : U)._1, (_ : U)._2)
     
-    val formula : Formula[U] = {
+    val formula = {
       val badInput = at(inBatch)(_ should existsRecord(_ == (badId, false)))
       val allGoodInputs = at(inBatch)(_ should foreachRecord(_._2 == true))
       val noIdBanned = at(outBatch)(_.isEmpty)
@@ -81,6 +81,6 @@ class StreamingFormulaDemo2
       gen)(
       testSubject)( 
       formula)
-  }.set(minTestsOk = 10).verbose  
+  }.set(minTestsOk = 10).verbose
 
 }
