@@ -1,5 +1,6 @@
 # sscheck 0.3.2
 Minor maintenance release
+
  * replace `Now` by `BindNext`: #53 and move overloads of `Formula.now` that don't generate a result immediately to overloads of `Formula.next`, so the DSL is more clear
  * add `beEqualAsSetTo` RDD matcher
  * minor scaladoc fixes
